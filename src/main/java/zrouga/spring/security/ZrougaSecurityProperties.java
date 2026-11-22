@@ -19,7 +19,39 @@ public class ZrougaSecurityProperties {
     /** Durée de vie du refresh token en millisecondes (défaut : 24 heures). */
     private long jwtRefreshExpirationMs = 86_400_000L;
 
-    /** Chemins accessibles sans authentification (défaut : {@code /api/auth/**}). */
+    /**
+     * Déclaration des endpoints <b>PUBLICS</b> (accessibles sans jeton) — <b>tous les
+     * autres endpoints sont PRIVÉS</b> par défaut : jeton Bearer valide + compte actif
+     * exigés, sinon 401.
+     *
+     * <p>À la construction de la chaîne de filtres, ces chemins reçoivent
+     * {@code permitAll()} puis {@code anyRequest().authenticated()}.</p>
+     *
+     * <p><b>Déclarer un endpoint PUBLIC</b> — ajoutez son motif dans la configuration :</p>
+     * <pre>{@code
+     * zrouga:
+     *   security:
+     *     public-paths:
+     *       - /api/auth/**      # défaut : signup, signin, refreshtoken, signout
+     *       - /api/public/**    # ex : ressources ouvertes
+     *       - /health           # ex : chemin exact
+     * }</pre>
+     * <p>Motifs Spring : {@code *} = un segment ({@code /a/*} ≠ {@code /a/b/c}),
+     * {@code **} = zéro ou plusieurs segments, chemin sans joker = correspondance exacte.
+     * La liste YAML <b>remplace</b> la valeur par défaut : répétez {@code /api/auth/**}
+     * si vous l'ajoutez à côté d'autres chemins.</p>
+     *
+     * <p><b>Déclarer un endpoint PRIVÉ</b> : rien à faire — tout ce qui n'est pas listé ici
+     * est privé automatiquement. Pour exiger <b>en plus</b> un rôle :</p>
+     * <ul>
+     * <li>annotation sur le contrôleur : {@code @PreAuthorize("hasRole('ADMIN')")}
+     *     ({@code @EnableMethodSecurity} est déjà actif) ;</li>
+     * <li>ou règles par route : déclarez votre propre bean {@code SecurityFilterChain}
+     *     (il remplace celui du starter).</li>
+     * </ul>
+     * <p>Voir aussi la Javadoc de
+     * {@code ZrougaSecurityAutoConfiguration#filterChain} et la §6 du README.</p>
+     */
     private List<String> publicPaths = List.of("/api/auth/**");
 
     /** Nombre maximal de tentatives de connexion échouées avant blocage (défaut : 5). */

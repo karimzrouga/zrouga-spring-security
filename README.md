@@ -164,6 +164,30 @@ Modèle par défaut : `public-paths` (défaut `/api/auth/**`) → `permitAll()` 
 `authenticated()` (JWT valide + compte actif). Pour exiger **en plus** un rôle sur une route non
 publique, deux approches :
 
+### Déclarer un endpoint PUBLIC ou PRIVÉ
+
+**Public** (sans jeton) = déclaré dans `zrouga.security.public-paths` — **privé** = tout le reste, automatiquement.
+
+```yaml
+zrouga:
+  security:
+    public-paths:                # ← seuls ces chemins sont PUBLICS
+      - /api/auth/**             # défaut : signup, signin, refreshtoken, signout
+      - /api/public/**           # ex : ressources ouvertes
+      - /health                  # ex : chemin exact
+```
+
+| Déclaration | Endpoint privé (défaut) | Endpoint public | Endpoint privé + rôle |
+|---|---|---|---|
+| **Où** | rien à faire — hors `public-paths` | `public-paths` (YAML) | `@PreAuthorize` ou `SecurityFilterChain` |
+| **Exigence** | JWT valide + compte actif → sinon **401** | aucune | rôle absent → **403** |
+| **Exemple** | `GET /api/hello` | `POST /api/auth/signup` | `GET /api/admin/stats` |
+
+- Motifs Spring : `*` = un segment, `**` = plusieurs segments, sans joker = chemin exact.
+- La liste YAML **remplace** le défaut : répétez `/api/auth/**` si vous ajoutez d'autres chemins.
+- Attention : plus une liste est large (`/**`), plus d'endpoints échappent à l'authentification —
+  déclarez strictement ce qui doit l'être.
+
 ### a) Par annotation (recommandé — `@EnableMethodSecurity` déjà actif)
 
 ```java
