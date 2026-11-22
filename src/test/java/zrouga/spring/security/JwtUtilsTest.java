@@ -1,0 +1,108 @@
+package zrouga.spring.security;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.util.Date;
+import java.util.List;
+
+import zrouga.spring.security.jwt.JwtUtils;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import org.junit.jupiter.api.Test;
+
+class JwtUtilsTest {
+
+    private static final String SECRET =
+            "ZROUGATESTSECRET0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    private record SimpleUser(Long id, String email, String password, List<String> roles, Boolean status)
+            implements AuthUser {
+
+        @Override
+        public Long getId() {
+            return id;
+        }
+
+        @Override
+        public String getEmail() {
+            return email;
+        }
+
+        @Override
+        public String getPassword() {
+            return password;
+        }
+
+        @Override
+        public List<String> getRoles() {
+            return roles;
+        }
+
+        @Override
+        public Boolean getStatus() {
+            return status;
+        }
+    }
+
+    private ZrougaSecurityProperties properties(long expirationMs) {
+        ZrougaSecurityProperties properties = new ZrougaSecurityProperties();
+        properties.setJwtSecret(SECRET);
+        properties.setJwtExpirationMs(expirationMs);
+        return properties;
+    }
+
+    private SimpleUser user() {
+        return new SimpleUser(1L, "admin@test.com", "hash", List.of("ADMIN", "AQP"), true);
+    }
+
+    @Test
+    void genereUnJetonValideAvecLesClaimsAttendus() {
+        JwtUtils jwtUtils = new JwtUtils(properties(3_600_000L));
+        SimpleUser user = user();
+
+        String token = jwtUtils.generateJwtToken(UserDetailsImpl.build(user), user);
+
+        assertThat(token).isNotBlank();
+        assertThat(jwtUtils.validateJwtToken(token)).isTrue();
+        assertThat(jwtUtils.getUserNameFromJwtToken(token)).isEqualTo("admin@test.com");
+
+        Claims claims = Jwts.parser().setSigningKey(SECRET).parseClaimsJws(token).getBody();
+        assertThat(claims.getSubject()).isEqualTo("admin@test.com");
+        assertThat(((Number) claims.get("id")).longValue()).isEqualTo(1L);
+        assertThat(claims.get("email")).isEqualTo("admin@test.com");
+        assertThat((List<Object>) claims.get("roles")).containsExactly("ADMIN", "AQP");
+        assertThat(claims.get("status")).isEqualTo(Boolean.TRUE);
+        assertThat(claims.getExpiration()).isAfter(new Date());
+    }
+
+    @Test
+    void rejecteUnJetonExpire() {
+        JwtUtils jwtUtils = new JwtUtils(properties(-5_000L));
+        SimpleUser user = user();
+
+        String token = jwtUtils.generateJwtToken(UserDetailsImpl.build(user), user);
+
+        assertThat(jwtUtils.validateJwtToken(token)).isFalse();
+    }
+
+    @Test
+    void rejecteUnJetonAltere() {
+        JwtUtils jwtUtils = new JwtUtils(properties(3_600_000L));
+        SimpleUser user = user();
+
+        String token = jwtUtils.generateJwtToken(UserDetailsImpl.build(user), user) + "x";
+
+        assertThat(jwtUtils.validateJwtToken(token)).isFalse();
+    }
+
+    @Test
+    void refuseUnSecretVide() {
+        ZrougaSecurityProperties properties = new ZrougaSecurityProperties();
+
+        assertThatThrownBy(() -> new JwtUtils(properties))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("zrouga.security.jwt-secret");
+    }
+}
