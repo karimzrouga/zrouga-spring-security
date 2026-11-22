@@ -2,6 +2,7 @@ package zrouga.spring.security.autoconfigure;
 
 import zrouga.spring.security.AuthResource;
 import zrouga.spring.security.AuthService;
+import zrouga.spring.security.AuthUserCreator;
 import zrouga.spring.security.AuthUserProvider;
 import zrouga.spring.security.RefreshTokenService;
 import zrouga.spring.security.RefreshTokenStore;
@@ -118,9 +119,11 @@ public class ZrougaSecurityAutoConfiguration {
             ObjectProvider<AuthUserProvider> userProvider,
             JwtUtils jwtUtils,
             RefreshTokenService refreshTokenService,
-            LoginRateLimiter loginRateLimiter) {
+            LoginRateLimiter loginRateLimiter,
+            PasswordEncoder passwordEncoder,
+            ObjectProvider<AuthUserCreator> creatorProvider) {
         return new AuthService(authenticationManager, userProvider, jwtUtils, refreshTokenService,
-                loginRateLimiter);
+                loginRateLimiter, passwordEncoder, creatorProvider);
     }
 
     @Bean
@@ -135,6 +138,46 @@ public class ZrougaSecurityAutoConfiguration {
         return new TokenControllerAdvice();
     }
 
+    /**
+     * Chaîne de filtres par défaut : tout est authentifié sauf les chemins publics
+     * ({@code zrouga.security.public-paths}, qui couvrent par défaut {@code /api/auth/**}
+     * — donc aussi {@code POST /api/auth/signup}).
+     *
+     * <p><b>Autorisation par rôle d'une API non publique</b> (2 approches) :</p>
+     * <ul>
+     * <li><b>Sur un contrôleur / méthode</b> — {@code @EnableMethodSecurity} est déjà actif :
+     * <pre>{@code
+     * @PreAuthorize("hasRole('ADMIN')")
+     * @GetMapping("/api/admin/stats")
+     * public Stats stats() { ... }
+     *
+     * @PreAuthorize("hasAnyRole('ADMIN', 'AQP')")
+     * @GetMapping("/api/controle/rapports")
+     * public List<Rapport> rapports() { ... }
+     * }</pre></li>
+     * <li><b>Dans un SecurityFilterChain surchargeable</b> (déclarez votre propre bean
+     * {@code SecurityFilterChain} — celui du starter est alors remplacé) :
+     * <pre>{@code
+     * @Bean
+     * SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+     *     http.csrf(AbstractHttpConfigurer::disable)
+     *         .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+     *         .authorizeHttpRequests(auth -> auth
+     *             .requestMatchers("/api/auth/**").permitAll()      // public
+     *             .requestMatchers("/api/admin/**").hasRole("ADMIN") // non public, rôle requis
+     *             .requestMatchers("/api/controle/**").hasAnyRole("ADMIN", "AQP")
+     *             .anyRequest().authenticated())                     // le reste : jeton valide
+     *         .exceptionHandling(e -> e.authenticationEntryPoint(unauthorizedHandler));
+     *     return http.build();
+     * }
+     * }</pre></li>
+     * </ul>
+     *
+     * <p>Les rôles proviennent de {@link zrouga.spring.security.AuthUser#getRoles()} <b>sans</b> préfixe (ex :
+     * {@code "ADMIN"}) ; le préfixe {@code ROLE_} est ajouté automatiquement à la construction
+     * des autorités — écrivez donc {@code hasRole("ADMIN")}, jamais {@code hasRole("ROLE_ADMIN")}.
+     * Sans préfixe ajouté, {@code hasRole} ne trouverait jamais le rôle et renverrait 403.</p>
+     */
     @Bean
     @ConditionalOnMissingBean(SecurityFilterChain.class)
     public SecurityFilterChain filterChain(

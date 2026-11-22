@@ -26,6 +26,17 @@ public class TokenControllerAdvice {
         return error(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(EmailAlreadyUsedException.class)
+    public ResponseEntity<ApiError> handleEmailAlreadyUsedException(EmailAlreadyUsedException ex, WebRequest request) {
+        return error(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(SignupNotSupportedException.class)
+    public ResponseEntity<ApiError> handleSignupNotSupportedException(
+            SignupNotSupportedException ex, WebRequest request) {
+        return error(HttpStatus.NOT_IMPLEMENTED, ex.getMessage(), request);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> handleValidationException(MethodArgumentNotValidException ex, WebRequest request) {
         String message = ex.getBindingResult().getFieldErrors().stream()

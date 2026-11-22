@@ -89,17 +89,20 @@ public class MonAuthUserProvider implements AuthUserProvider {
 
 Sans bean `AuthUserProvider`, le démarrage échoue avec un message explicite.
 
+Pour activer l'inscription (`/api/auth/signup`), déclarez en plus un bean `AuthUserCreator` — voir §5.
+
 ## 4. Endpoints exposés
 
 | Méthode | Chemin | Corps / réponse |
 |---|---|---|
+| POST | `/api/auth/signup` | `{email, password}` → `{message}` (**201**) |
 | POST | `/api/auth/signin` | `{email, password}` → `{token, type: "Bearer", refreshToken}` |
 | POST | `/api/auth/refreshtoken` | `{refreshToken}` → `{accessToken, refreshToken, tokenType: "Bearer"}` (**refreshToken tourné**) |
 | POST | `/api/auth/signout` | (Bearer) → `{message}` |
 
 ### Erreurs — format unifié
 
-Toutes les erreurs du starter (400, 401, 403, 429) ont la forme :
+Toutes les erreurs du starter (400, 401, 403, 409, 429, 501) ont la forme :
 
 ```json
 { "status": 403, "error": "Forbidden", "message": "...", "path": "/api/auth/refreshtoken", "timestamp": "2026-11-22T12:00:00Z" }
@@ -109,28 +112,122 @@ Toutes les erreurs du starter (400, 401, 403, 429) ont la forme :
 |---|---|
 | JWT absent / invalide / compte inactif / mauvais mot de passe | 401 |
 | Refresh token inconnu, expiré ou déjà tourné | 403 |
+| E-mail déjà utilisé lors d'une inscription | 409 |
 | Trop de tentatives de connexion (`rate-limit-max-attempts`) | 429 |
 | Corps de requête invalide (validation `@Valid`) | 400 |
+| Inscription sans bean `AuthUserCreator` déclaré | 501 |
 
 Le message d'erreur ne contient **jamais** la valeur du refresh token.
 
 Tout le reste de l'API est `authenticated()` sauf `public-paths`.
 
-## 5. Claims du JWT (HS512)
+## 5. Inscription — `POST /api/auth/signup`
+
+Corps : `{"email": "...", "password": "..."}` — mot de passe de **8 à 128 caractères**, e-mail valide.
+Réponse `201` : `{"message": "User registered successfully!"}` puis connectez-vous via `/signin`.
+
+L'inscription est **publique** (couverte par `public-paths` = `/api/auth/**`). Pour l'activer, déclarez un bean `AuthUserCreator` — c'est votre projet qui crée réellement l'utilisateur :
+
+```java
+@Component
+public class MonAuthUserCreator implements AuthUserCreator {
+
+    private final UtilisateurRepository repository; // votre entité / votre table
+
+    @Override
+    public void create(String email, String encodedPassword) {
+        Utilisateur u = new Utilisateur();
+        u.setEmail(email);
+        u.setPassword(encodedPassword);   // hash BCrypt déjà produit par le starter
+        u.setRole(Role.USER);             // ← les rôles sont DÉCIDÉS ICI
+        u.setActif(true);
+        repository.save(u);
+    }
+}
+```
+
+> **Les rôles ne viennent jamais du client** : le corps de signup ne contient que `email` et `password`.
+> C'est `AuthUserCreator` qui attribue le rôle (rôle par défaut, validation manuelle, …) — sinon un
+> nouvel utilisateur pourrait s'auto-élever en `ADMIN`.
+
+| Cas | Statut |
+|---|---|
+| Inscription réussie | 201 |
+| E-mail déjà utilisé | 409 |
+| Aucun bean `AuthUserCreator` déclaré | 501 (message : « declarez un bean AuthUserCreator… ») |
+| Corps invalide (e-mail, mot de passe < 8 caractères) | 400 |
+| Trop d'inscriptions ratées pour le même e-mail (rate-limit) | 429 |
+
+## 6. Autorisation par rôle — API non publiques
+
+Modèle par défaut : `public-paths` (défaut `/api/auth/**`) → `permitAll()` ; **tout le reste** →
+`authenticated()` (JWT valide + compte actif). Pour exiger **en plus** un rôle sur une route non
+publique, deux approches :
+
+### a) Par annotation (recommandé — `@EnableMethodSecurity` déjà actif)
+
+```java
+@RestController
+@RequestMapping("/api/admin")
+public class AdminResource {
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/stats")
+    public Stats stats() { ... }                 // 403 si rôle ADMIN absent
+
+    @PreAuthorize("hasAnyRole('ADMIN', 'AQP')")
+    @GetMapping("/rapports")
+    public List<Rapport> rapports() { ... }      // 403 si ni ADMIN ni AQP
+}
+```
+
+Sur une classe entière : placez `@PreAuthorize("hasRole('ADMIN')")` au-dessus de `public class …`.
+
+### b) Par route (déclarez votre propre `SecurityFilterChain`)
+
+Votre bean remplace celui du starter (`@ConditionalOnMissingBean`) :
+
+```java
+@Bean
+SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    http.csrf(AbstractHttpConfigurer::disable)
+        .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .authorizeHttpRequests(auth -> auth
+            .requestMatchers("/api/auth/**").permitAll()            // public
+            .requestMatchers("/api/admin/**").hasRole("ADMIN")      // rôle exigé
+            .requestMatchers("/api/controle/**").hasAnyRole("ADMIN", "AQP")
+            .anyRequest().authenticated())                           // le reste : jeton valide
+        .exceptionHandling(e -> e.authenticationEntryPoint(unauthorizedHandler))
+        .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+    return http.build();
+}
+```
+
+### Bonnes pratiques
+
+- **`hasRole('X')` sans préfixe** : les claims JWT portent `ADMIN` (sans `ROLE_`) et le préfixe est
+  ajouté automatiquement à la construction des autorités — écrivez `hasRole("ADMIN")`, **jamais**
+  `hasRole("ROLE_ADMIN")` (sinon 403 permanent).
+- Sans jeton → **401** ; jeton valide mais rôle absent → **403**.
+- La règle s'applique à **chaque requête côté serveur** : le front ne fait que de l'affichage.
+- Les rôles viennent de `AuthUser.getRoles()` : illimités, valeurs brutes (`"ADMIN"`, `"AQP"`, …).
+- L'ordre des `requestMatchers` compte : les règles spécifiques avant `anyRequest().authenticated()`.
+
+## 7. Claims du JWT (HS512)
 
 `sub` = email, `id`, `email`, `roles` (liste illimitée, valeurs brutes), `status` (Boolean), `exp`.
 Signature : `zrouga.security.jwt-secret`.
 
 Côté Spring Security, les autorités sont construites avec le préfixe standard `ROLE_` :
-utilisez `@PreAuthorize("hasRole('ADMIN')")` (et non `hasAuthority('ADMIN')`).
+utilisez `@PreAuthorize("hasRole('ADMIN')")` (et non `hasAuthority('ADMIN')`) — détails §6.
 
-## 6. Comptes désactivés (status)
+## 8. Comptes désactivés (status)
 
 - `AuthUser.getStatus()` vaut `false` → **connexion refusée** (401) ;
 - un JWT existant d'un compte désactivé est **refusé à chaque requête** (le claim `status` est vérifié) ;
 - `null` = pas d'information → compte actif.
 
-## 7. Refresh token
+## 9. Refresh token
 
 - **Rotation** : chaque `/refreshtoken` révoque l'ancien jeton et en émet un nouveau. Toute réutilisation d'un jeton déjà tourné répond 403 (détection de vol).
 - **Connexion** : un nouvel `signin` révoque tous les refresh tokens précédents de l'utilisateur (politique mono-session).
@@ -139,13 +236,14 @@ utilisez `@PreAuthorize("hasRole('ADMIN')")` (et non `hasAuthority('ADMIN')`).
 - **Purge des expirés** : optionnelle — `zrouga.security.cleanup-enabled=true` active une purge périodique (`cleanup-fixed-delay-ms`).
 - Personnalisable : déclarez votre propre bean `RefreshTokenStore` — les auto-configs reculent.
 
-## 8. Rate-limiting (anti-bruteforce)
+## 10. Rate-limiting (anti-bruteforce)
 
 5 tentatives échouées par e-mail puis 15 minutes de blocage (429), par défaut — réglable via
 `rate-limit-max-attempts` / `rate-limit-window-ms`. Une connexion réussie remet le compteur à zéro.
+Le même compteur protège l'inscription (clé `signup:<email>`).
 Personnalisable : déclarez votre propre bean `LoginRateLimiter` (base de données, Redis, …).
 
-## 9. Personnalisation
+## 11. Personnalisation
 
 Tous les beans suivants sont surchargeables — déclarez le vôtre et celui du starter est remplacé :
 
@@ -164,10 +262,11 @@ Tous les beans suivants sont surchargeables — déclarez le vôtre et celui du 
 | `AuthService`, `AuthResource`, `AuthEntryPointJwt`, `TokenControllerAdvice` | implémentations par défaut |
 
 - Exclusion complète : `spring.autoconfigure.exclude=zrouga.spring.security.autoconfigure.ZrougaSecurityAutoConfiguration`
+- `AuthUserCreator` : SPI fournie par le projet hôte (voir §5) — sans elle, `/signup` répond 501.
 - CORS : à définir côté projet hôte (aucune origine codée en dur côté starter).
 - `@CrossOrigin` supprimé : configurez le CORS via votre `CorsConfigurationSource` / `WebMvcConfigurer`.
 
-## 10. Build / publication (mainteneur)
+## 12. Build / publication (mainteneur)
 
 ```powershell
 .\mvnw.cmd verify          # tests + jacoco + jar + sources + javadoc

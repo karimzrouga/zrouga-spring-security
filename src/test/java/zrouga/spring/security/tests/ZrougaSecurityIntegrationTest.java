@@ -269,4 +269,43 @@ class ZrougaSecurityIntegrationTest {
                 .andExpect(jsonPath("$.path").isNotEmpty())
                 .andExpect(jsonPath("$.timestamp").isNotEmpty());
     }
+
+    @Test
+    void signupCreeUnUtilisateurPuisConnexion() throws Exception {
+        String email = "nouveau-" + System.nanoTime() + "@test.com";
+
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"password\":\"MotDePasse123\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.message").value("User registered successfully!"));
+
+        mockMvc.perform(post("/api/auth/signin")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"password\":\"MotDePasse123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andExpect(jsonPath("$.refreshToken").isNotEmpty());
+    }
+
+    @Test
+    void signupAvecEmailExistantRenvoie409() throws Exception {
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + TestApplication.ADMIN_EMAIL + "\",\"password\":\"MotDePasse123\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.error").value("Conflict"))
+                .andExpect(jsonPath("$.message", containsString("already in use")));
+    }
+
+    @Test
+    void signupMotDePasseTropCourtRenvoie400() throws Exception {
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"court@test.com\",\"password\":\"abc\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message", containsString("password")));
+    }
 }

@@ -1,6 +1,7 @@
 package zrouga.spring.security.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Optional;
 
@@ -19,11 +20,13 @@ import zrouga.spring.security.autoconfigure.ZrougaCleanupAutoConfiguration;
 import zrouga.spring.security.autoconfigure.ZrougaInMemoryRefreshTokenAutoConfiguration;
 import zrouga.spring.security.autoconfigure.ZrougaJpaRefreshTokenAutoConfiguration;
 import zrouga.spring.security.autoconfigure.ZrougaSecurityAutoConfiguration;
+import zrouga.spring.security.exception.SignupNotSupportedException;
 import zrouga.spring.security.exception.TokenControllerAdvice;
 import zrouga.spring.security.jpa.JpaRefreshTokenStore;
 import zrouga.spring.security.jwt.AuthEntryPointJwt;
 import zrouga.spring.security.jwt.AuthTokenFilter;
 import zrouga.spring.security.jwt.JwtUtils;
+import zrouga.spring.security.payload.SignupRequest;
 import zrouga.spring.security.ratelimit.InMemoryLoginRateLimiter;
 import zrouga.spring.security.ratelimit.LoginRateLimiter;
 
@@ -93,6 +96,19 @@ class AutoConfigurationBackoffTest {
             Throwable failure = context.getStartupFailure();
             assertThat(failure).isNotNull();
             assertThat(messages(failure)).contains("AuthUserProvider");
+        });
+    }
+
+    @Test
+    void signupSansCreateurRenvoieSignupNotSupported() {
+        runner.withUserConfiguration(ProviderConfiguration.class).run(context -> {
+            SignupRequest request = new SignupRequest();
+            request.setEmail("nouveau@test.com");
+            request.setPassword("MotDePasse123");
+
+            assertThatThrownBy(() -> context.getBean(AuthService.class).signup(request))
+                    .isInstanceOf(SignupNotSupportedException.class)
+                    .hasMessageContaining("AuthUserCreator");
         });
     }
 
@@ -245,9 +261,11 @@ class AutoConfigurationBackoffTest {
                 org.springframework.beans.factory.ObjectProvider<AuthUserProvider> userProvider,
                 JwtUtils jwtUtils,
                 RefreshTokenService refreshTokenService,
-                LoginRateLimiter loginRateLimiter) {
+                LoginRateLimiter loginRateLimiter,
+                PasswordEncoder passwordEncoder,
+                org.springframework.beans.factory.ObjectProvider<zrouga.spring.security.AuthUserCreator> creatorProvider) {
             return new AuthService(authenticationManager, userProvider, jwtUtils, refreshTokenService,
-                    loginRateLimiter);
+                    loginRateLimiter, passwordEncoder, creatorProvider);
         }
 
         @Bean

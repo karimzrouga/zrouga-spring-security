@@ -1,10 +1,12 @@
 package zrouga.spring.security;
 
 import zrouga.spring.security.payload.LoginRequest;
+import zrouga.spring.security.payload.SignupRequest;
 import zrouga.spring.security.payload.TokenRefreshRequest;
 
 import jakarta.validation.Valid;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,6 +27,11 @@ public class AuthResource {
     @PostMapping("/signin")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
         return ResponseEntity.ok(authService.authenticateUser(loginRequest));
+    }
+
+    @PostMapping("/signup")
+    public ResponseEntity<?> signup(@Valid @RequestBody SignupRequest signupRequest) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(authService.signup(signupRequest));
     }
 
     @PostMapping("/refreshtoken")

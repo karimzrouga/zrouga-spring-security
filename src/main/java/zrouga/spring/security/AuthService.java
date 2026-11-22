@@ -3,11 +3,14 @@ package zrouga.spring.security;
 import java.util.Locale;
 import java.util.Optional;
 
+import zrouga.spring.security.exception.EmailAlreadyUsedException;
+import zrouga.spring.security.exception.SignupNotSupportedException;
 import zrouga.spring.security.exception.TokenRefreshException;
 import zrouga.spring.security.jwt.JwtUtils;
 import zrouga.spring.security.payload.JwtResponse;
 import zrouga.spring.security.payload.LoginRequest;
 import zrouga.spring.security.payload.MessageResponse;
+import zrouga.spring.security.payload.SignupRequest;
 import zrouga.spring.security.payload.TokenRefreshRequest;
 import zrouga.spring.security.payload.TokenRefreshResponse;
 import zrouga.spring.security.ratelimit.LoginRateLimiter;
@@ -20,6 +23,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 public class AuthService {
 
@@ -28,18 +32,24 @@ public class AuthService {
     private final JwtUtils jwtUtils;
     private final RefreshTokenService refreshTokenService;
     private final LoginRateLimiter rateLimiter;
+    private final PasswordEncoder passwordEncoder;
+    private final ObjectProvider<AuthUserCreator> creatorProvider;
 
     public AuthService(
             AuthenticationManager authenticationManager,
             ObjectProvider<AuthUserProvider> userProvider,
             JwtUtils jwtUtils,
             RefreshTokenService refreshTokenService,
-            LoginRateLimiter rateLimiter) {
+            LoginRateLimiter rateLimiter,
+            PasswordEncoder passwordEncoder,
+            ObjectProvider<AuthUserCreator> creatorProvider) {
         this.authenticationManager = authenticationManager;
         this.userProvider = userProvider;
         this.jwtUtils = jwtUtils;
         this.refreshTokenService = refreshTokenService;
         this.rateLimiter = rateLimiter;
+        this.passwordEncoder = passwordEncoder;
+        this.creatorProvider = creatorProvider;
     }
 
     public JwtResponse authenticateUser(LoginRequest loginRequest) {
@@ -93,6 +103,26 @@ public class AuthService {
         StoredRefreshToken rotated = refreshTokenService.createRefreshToken(user);
 
         return new TokenRefreshResponse(token, rotated.token());
+    }
+
+    public MessageResponse signup(SignupRequest request) {
+        AuthUserCreator creator = creatorProvider.getIfAvailable();
+        if (creator == null) {
+            throw new SignupNotSupportedException(
+                    "Signup non configure : declarez un bean AuthUserCreator pour activer POST /api/auth/signup.");
+        }
+
+        String key = "signup:" + rateLimitKey(request.getEmail());
+        rateLimiter.check(key);
+
+        if (provider().findByEmail(request.getEmail()).isPresent()) {
+            rateLimiter.recordFailure(key);
+            throw new EmailAlreadyUsedException("Email already in use: " + request.getEmail());
+        }
+
+        creator.create(request.getEmail(), passwordEncoder.encode(request.getPassword()));
+        rateLimiter.reset(key);
+        return new MessageResponse("User registered successfully!");
     }
 
     public MessageResponse logoutUser() {

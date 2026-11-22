@@ -4,8 +4,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 
 import zrouga.spring.security.AuthUser;
+import zrouga.spring.security.AuthUserCreator;
 import zrouga.spring.security.AuthUserProvider;
 import zrouga.spring.security.payload.MessageResponse;
 
@@ -25,13 +27,17 @@ public class TestApplication {
 
     public static final String PASSWORD = "Admin@1234";
 
+    private final Map<Long, AuthUser> byId = new HashMap<>();
+
+    private final Map<String, AuthUser> byEmail = new HashMap<>();
+
+    private final AtomicLong nextId = new AtomicLong(3L);
+
     @Bean
     public AuthUserProvider authUserProvider(PasswordEncoder passwordEncoder) {
-        Map<Long, AuthUser> byId = new HashMap<>();
-        Map<String, AuthUser> byEmail = new HashMap<>();
-        register(byId, byEmail, new TestUser(1L, ADMIN_EMAIL, passwordEncoder.encode(PASSWORD),
+        register(new TestUser(1L, ADMIN_EMAIL, passwordEncoder.encode(PASSWORD),
                 List.of("ADMIN", "CONTROLEUR"), true));
-        register(byId, byEmail, new TestUser(2L, INACTIF_EMAIL, passwordEncoder.encode(PASSWORD),
+        register(new TestUser(2L, INACTIF_EMAIL, passwordEncoder.encode(PASSWORD),
                 List.of("AQP"), false));
 
         return new AuthUserProvider() {
@@ -47,7 +53,15 @@ public class TestApplication {
         };
     }
 
-    private static void register(Map<Long, AuthUser> byId, Map<String, AuthUser> byEmail, TestUser user) {
+    @Bean
+    public AuthUserCreator authUserCreator() {
+        return (email, encodedPassword) -> {
+            long id = nextId.getAndIncrement();
+            register(new TestUser(id, email, encodedPassword, List.of("USER"), true));
+        };
+    }
+
+    private void register(TestUser user) {
         byId.put(user.getId(), user);
         byEmail.put(user.getEmail(), user);
     }
