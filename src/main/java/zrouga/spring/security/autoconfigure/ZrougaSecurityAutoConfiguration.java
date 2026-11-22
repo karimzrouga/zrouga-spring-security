@@ -3,9 +3,15 @@ package zrouga.spring.security.autoconfigure;
 import zrouga.spring.security.AuthResource;
 import zrouga.spring.security.AuthService;
 import zrouga.spring.security.AuthUserCreator;
+import zrouga.spring.security.AuthUserPasswordUpdater;
 import zrouga.spring.security.AuthUserProvider;
+import zrouga.spring.security.InMemoryPasswordResetTokenStore;
+import zrouga.spring.security.PasswordResetEmailSender;
+import zrouga.spring.security.PasswordResetService;
+import zrouga.spring.security.PasswordResetTokenStore;
 import zrouga.spring.security.RefreshTokenService;
 import zrouga.spring.security.RefreshTokenStore;
+import zrouga.spring.security.SmtpPasswordResetEmailSender;
 import zrouga.spring.security.UserDetailsServiceImpl;
 import zrouga.spring.security.ZrougaSecurityProperties;
 import zrouga.spring.security.exception.TokenControllerAdvice;
@@ -19,10 +25,12 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration;
 import org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -128,8 +136,38 @@ public class ZrougaSecurityAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(AuthResource.class)
-    public AuthResource authResource(AuthService authService) {
-        return new AuthResource(authService);
+    public AuthResource authResource(AuthService authService, PasswordResetService passwordResetService) {
+        return new AuthResource(authService, passwordResetService);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(PasswordResetTokenStore.class)
+    public PasswordResetTokenStore passwordResetTokenStore() {
+        return new InMemoryPasswordResetTokenStore();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(PasswordResetEmailSender.class)
+    @ConditionalOnProperty(prefix = "zrouga.security", name = "reset-enabled", havingValue = "true")
+    public SmtpPasswordResetEmailSender smtpPasswordResetEmailSender(
+            ObjectProvider<JavaMailSender> mailSender,
+            ZrougaSecurityProperties properties) {
+        return new SmtpPasswordResetEmailSender(mailSender, properties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(PasswordResetService.class)
+    public PasswordResetService passwordResetService(
+            ZrougaSecurityProperties properties,
+            ObjectProvider<AuthUserProvider> userProvider,
+            ObjectProvider<AuthUserPasswordUpdater> passwordUpdater,
+            ObjectProvider<PasswordResetEmailSender> emailSender,
+            PasswordResetTokenStore passwordResetTokenStore,
+            RefreshTokenService refreshTokenService,
+            LoginRateLimiter loginRateLimiter,
+            PasswordEncoder passwordEncoder) {
+        return new PasswordResetService(properties, userProvider, passwordUpdater, emailSender,
+                passwordResetTokenStore, refreshTokenService, loginRateLimiter, passwordEncoder);
     }
 
     @Bean

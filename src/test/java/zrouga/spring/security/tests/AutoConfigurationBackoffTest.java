@@ -8,8 +8,11 @@ import java.util.Optional;
 import zrouga.spring.security.AuthResource;
 import zrouga.spring.security.AuthService;
 import zrouga.spring.security.AuthUser;
+import zrouga.spring.security.AuthUserPasswordUpdater;
 import zrouga.spring.security.AuthUserProvider;
 import zrouga.spring.security.InMemoryRefreshTokenStore;
+import zrouga.spring.security.PasswordResetEmailSender;
+import zrouga.spring.security.PasswordResetService;
 import zrouga.spring.security.RefreshTokenService;
 import zrouga.spring.security.RefreshTokenStore;
 import zrouga.spring.security.TestSecret;
@@ -20,12 +23,14 @@ import zrouga.spring.security.autoconfigure.ZrougaCleanupAutoConfiguration;
 import zrouga.spring.security.autoconfigure.ZrougaInMemoryRefreshTokenAutoConfiguration;
 import zrouga.spring.security.autoconfigure.ZrougaJpaRefreshTokenAutoConfiguration;
 import zrouga.spring.security.autoconfigure.ZrougaSecurityAutoConfiguration;
+import zrouga.spring.security.exception.PasswordResetNotSupportedException;
 import zrouga.spring.security.exception.SignupNotSupportedException;
 import zrouga.spring.security.exception.TokenControllerAdvice;
 import zrouga.spring.security.jpa.JpaRefreshTokenStore;
 import zrouga.spring.security.jwt.AuthEntryPointJwt;
 import zrouga.spring.security.jwt.AuthTokenFilter;
 import zrouga.spring.security.jwt.JwtUtils;
+import zrouga.spring.security.payload.ForgotPasswordRequest;
 import zrouga.spring.security.payload.SignupRequest;
 import zrouga.spring.security.ratelimit.InMemoryLoginRateLimiter;
 import zrouga.spring.security.ratelimit.LoginRateLimiter;
@@ -113,6 +118,44 @@ class AutoConfigurationBackoffTest {
     }
 
     @Test
+    void resetPasswordDesactiveRenvoie501() {
+        runner.withUserConfiguration(ProviderConfiguration.class).run(context -> {
+            ForgotPasswordRequest request = new ForgotPasswordRequest();
+            request.setEmail("nouveau@test.com");
+
+            assertThatThrownBy(() -> context.getBean(PasswordResetService.class).forgotPassword(request))
+                    .isInstanceOf(PasswordResetNotSupportedException.class)
+                    .hasMessageContaining("reset-enabled");
+        });
+    }
+
+    @Test
+    void resetEnabledSansUpdatourEchoueAuDemarrage() {
+        runner.withUserConfiguration(ProviderConfiguration.class, ResetSenderConfiguration.class)
+                .withPropertyValues(
+                        "zrouga.security.reset-enabled=true",
+                        "zrouga.security.reset-base-url=https://front.test/reset")
+                .run(context -> {
+                    Throwable failure = context.getStartupFailure();
+                    assertThat(failure).isNotNull();
+                    assertThat(messages(failure)).contains("AuthUserPasswordUpdater");
+                });
+    }
+
+    @Test
+    void resetEnabledSansSmtpEchoueAuDemarrage() {
+        runner.withUserConfiguration(ProviderConfiguration.class, ResetUpdaterConfiguration.class)
+                .withPropertyValues(
+                        "zrouga.security.reset-enabled=true",
+                        "zrouga.security.reset-base-url=https://front.test/reset")
+                .run(context -> {
+                    Throwable failure = context.getStartupFailure();
+                    assertThat(failure).isNotNull();
+                    assertThat(messages(failure)).contains("JavaMailSender");
+                });
+    }
+
+    @Test
     void beansUtilisateurRemplacentLesBecsDuStarter() {
         runner.withUserConfiguration(ProviderConfiguration.class, CustomBeansConfiguration.class).run(context -> {
             assertThat(context.getBean(PasswordEncoder.class))
@@ -173,6 +216,26 @@ class AutoConfigurationBackoffTest {
         @Bean
         org.springframework.web.cors.CorsConfigurationSource corsConfigurationSource() {
             return new org.springframework.web.cors.UrlBasedCorsConfigurationSource();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class ResetSenderConfiguration {
+
+        @Bean
+        PasswordResetEmailSender passwordResetEmailSender() {
+            return (email, rawToken) -> {
+            };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class ResetUpdaterConfiguration {
+
+        @Bean
+        AuthUserPasswordUpdater authUserPasswordUpdater() {
+            return (email, encodedPassword) -> {
+            };
         }
     }
 
@@ -269,8 +332,8 @@ class AutoConfigurationBackoffTest {
         }
 
         @Bean
-        AuthResource customAuthResource(AuthService authService) {
-            return new AuthResource(authService);
+        AuthResource customAuthResource(AuthService authService, PasswordResetService passwordResetService) {
+            return new AuthResource(authService, passwordResetService);
         }
 
         @Bean

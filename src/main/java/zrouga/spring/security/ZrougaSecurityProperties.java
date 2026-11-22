@@ -66,6 +66,33 @@ public class ZrougaSecurityProperties {
     /** Intervalle de la purge des refresh tokens expirés en millisecondes (défaut : 1 heure). */
     private long cleanupFixedDelayMs = 3_600_000L;
 
+    /**
+     * Active la réinitialisation du mot de passe par e-mail SMTP — fonctionnalité
+     * <b>optionnelle, désactivée par défaut</b> (défaut : {@code false}).
+     *
+     * <p>Quand {@code true} au démarrage, le starter vérifie que {@code reset-base-url}
+     * est renseigné, qu'un bean {@code AuthUserPasswordUpdater} existe, et qu'un
+     * {@code JavaMailSender} est disponible (ajoutez {@code spring-boot-starter-mail}
+     * et {@code spring.mail.*}) — sinon le démarrage échoue avec un message explicite.</p>
+     */
+    private boolean resetEnabled = false;
+
+    /** Durée de validité du jeton de réinitialisation en millisecondes (défaut : 15 minutes). */
+    private long resetTokenExpirationMs = 900_000L;
+
+    /**
+     * URL de la page de réinitialisation du mot de passe côté front — obligatoire si
+     * {@code reset-enabled=true}. Le paramètre {@code ?token=} (ou {@code &token=})
+     * y est ajouté pour former le lien reçu par e-mail.
+     */
+    private String resetBaseUrl = "";
+
+    /**
+     * Adresse expéditrice des e-mails de réinitialisation — si vide, utilise
+     * {@code spring.mail.username} (doit rester vide uniquement si SMTP fournit l'expéditeur).
+     */
+    private String resetEmailFrom = "";
+
     public String getJwtSecret() {
         return jwtSecret;
     }
@@ -128,5 +155,37 @@ public class ZrougaSecurityProperties {
 
     public void setCleanupFixedDelayMs(long cleanupFixedDelayMs) {
         this.cleanupFixedDelayMs = cleanupFixedDelayMs;
+    }
+
+    public boolean isResetEnabled() {
+        return resetEnabled;
+    }
+
+    public void setResetEnabled(boolean resetEnabled) {
+        this.resetEnabled = resetEnabled;
+    }
+
+    public long getResetTokenExpirationMs() {
+        return resetTokenExpirationMs;
+    }
+
+    public void setResetTokenExpirationMs(long resetTokenExpirationMs) {
+        this.resetTokenExpirationMs = resetTokenExpirationMs;
+    }
+
+    public String getResetBaseUrl() {
+        return resetBaseUrl;
+    }
+
+    public void setResetBaseUrl(String resetBaseUrl) {
+        this.resetBaseUrl = resetBaseUrl;
+    }
+
+    public String getResetEmailFrom() {
+        return resetEmailFrom;
+    }
+
+    public void setResetEmailFrom(String resetEmailFrom) {
+        this.resetEmailFrom = resetEmailFrom;
     }
 }

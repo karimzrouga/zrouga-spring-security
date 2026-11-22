@@ -1,6 +1,6 @@
 # zrouga-spring-security-starter
 
-Starter Spring Security **générique et autonome** : JWT (HS512), refresh token avec rotation, rate-limiting sur la connexion, abstraction `AuthUser` / `AuthUserProvider`, rôles illimités. Réutilisable dans n'importe quel projet Spring Boot 4 / Java 21 .
+Starter Spring Security **générique et autonome** : JWT (HS512), refresh token avec rotation, rate-limiting sur la connexion, abstraction `AuthUser` / `AuthUserProvider`, rôles illimités, inscription, réinitialisation du mot de passe par e-mail SMTP (**optionnelle**). Réutilisable dans n'importe quel projet Spring Boot 4 / Java 21 .
 
 - Coordonnées : `zrouga.spring:security-starter:1.1.0`
 - Auto-configuré via `AutoConfiguration.imports` : rien à importer, l'ajout de la dépendance suffit.
@@ -51,6 +51,10 @@ zrouga:
     rate-limit-window-ms: 900000                     # défaut : fenêtre de 15 min
     cleanup-enabled: false                           # défaut : purge des refresh tokens expirés désactivée
     cleanup-fixed-delay-ms: 3600000                  # défaut : purge toutes les 1 h
+    reset-enabled: false                             # défaut : réinitialisation SMTP DÉSACTIVÉE
+    reset-base-url: ""                               # obligatoire si reset-enabled=true (URL front)
+    reset-token-expiration-ms: 900000                # défaut : jeton valable 15 min
+    reset-email-from: ""                             # défaut : spring.mail.username
 ```
 
 Le secret doit être un **Base64 standard valide** (A-Z, a-z, 0-9, +, /, =) décodant à **au moins 64 octets (512 bits)** — exigence HS512, vérifiée au démarrage. Génération : `openssl rand -base64 64`.
@@ -97,6 +101,8 @@ Pour activer l'inscription (`/api/auth/signup`), déclarez en plus un bean `Auth
 |---|---|---|
 | POST | `/api/auth/signup` | `{email, password}` → `{message}` (**201**) |
 | POST | `/api/auth/signin` | `{email, password}` → `{token, type: "Bearer", refreshToken}` |
+| POST | `/api/auth/forgot-password` | `{email}` → `{message}` (**200**, toujours identique — si `reset-enabled`) |
+| POST | `/api/auth/reset-password` | `{token, password}` → `{message}` (**200** — si `reset-enabled`) |
 | POST | `/api/auth/refreshtoken` | `{refreshToken}` → `{accessToken, refreshToken, tokenType: "Bearer"}` (**refreshToken tourné**) |
 | POST | `/api/auth/signout` | (Bearer) → `{message}` |
 
@@ -113,9 +119,11 @@ Toutes les erreurs du starter (400, 401, 403, 409, 429, 501) ont la forme :
 | JWT absent / invalide / compte inactif / mauvais mot de passe | 401 |
 | Refresh token inconnu, expiré ou déjà tourné | 403 |
 | E-mail déjà utilisé lors d'une inscription | 409 |
+| Jeton de réinitialisation invalide, expiré ou déjà utilisé | 400 |
 | Trop de tentatives de connexion (`rate-limit-max-attempts`) | 429 |
 | Corps de requête invalide (validation `@Valid`) | 400 |
 | Inscription sans bean `AuthUserCreator` déclaré | 501 |
+| Réinitialisation désactivée (`reset-enabled=false`) | 501 |
 
 Le message d'erreur ne contient **jamais** la valeur du refresh token.
 
@@ -158,7 +166,63 @@ public class MonAuthUserCreator implements AuthUserCreator {
 | Corps invalide (e-mail, mot de passe < 8 caractères) | 400 |
 | Trop d'inscriptions ratées pour le même e-mail (rate-limit) | 429 |
 
-## 6. Autorisation par rôle — API non publiques
+## 6. Réinitialisation du mot de passe (optionnelle — SMTP)
+
+**Désactivée par défaut** — activez-la uniquement si vous en avez besoin :
+
+```yaml
+zrouga:
+  security:
+    reset-enabled: true                              # active la fonctionnalité
+    reset-base-url: https://mon-front.test/reset     # obligatoire (page front)
+    reset-token-expiration-ms: 900000                # défaut : jeton 15 min
+    reset-email-from: no-reply@mon-projet.test       # défaut : spring.mail.username
+spring:
+  mail:                                              # SMTP — dépendance spring-boot-starter-mail
+    host: smtp.example.test
+    port: 587
+    username: user@mon-projet.test
+    password: ***
+```
+
+Au démarrage avec `reset-enabled=true`, le starter **échoue avec un message explicite** si
+`reset-base-url`, le bean `AuthUserPasswordUpdater` ou le `JavaMailSender` (`spring.mail.*`)
+manque. Sans `reset-enabled`, aucune exigence — les deux endpoints répondent 501.
+
+### SPI obligatoire — `AuthUserPasswordUpdater`
+
+```java
+@Component
+public class MonPasswordUpdater implements AuthUserPasswordUpdater {
+
+    private final UtilisateurRepository repository; // votre entité / votre table
+
+    @Override
+    public void updatePassword(String email, String encodedPassword) {
+        Utilisateur u = repository.findByEmail(email).orElseThrow();
+        u.setPassword(encodedPassword);   // hash BCrypt déjà produit par le starter
+        repository.save(u);
+    }
+}
+```
+
+### Flux
+
+| Étape | Appel | Réponse |
+|---|---|---|
+| 1. Demande | `POST /api/auth/forgot-password` `{email}` | **200** toujours identique (anti-énumération) — l'e-mail part seulement si le compte existe |
+| 2. Lien | e-mail SMTP : `{reset-base-url}?token=…` | jeton aléatoire 256 bits, valable 15 min, **usage unique** |
+| 3. Nouveau mot de passe | `POST /api/auth/reset-password` `{token, password}` | **200** — hash enregistré + **tous les refresh tokens du compte révoqués** |
+
+- **Rate-limit** : 5 demandes / 15 min par e-mail (compte connu ou non — pas d'énumération par 429).
+- Jeton invalide, expiré ou déjà utilisé → **400** `Invalid or expired reset token.` (même message partout).
+- **SMTP par défaut** (`SmtpPasswordResetEmailSender`) ; personnalisez avec votre propre bean
+  `PasswordResetEmailSender` (SendGrid, API métier, console de dev…) — `spring.mail.*` n'est alors
+  pas requis.
+- Stockage en mémoire par défaut ; déclarez `PasswordResetTokenStore` pour une persistance
+  distribuée (Redis, table SQL).
+
+## 7. Autorisation par rôle — API non publiques
 
 Modèle par défaut : `public-paths` (défaut `/api/auth/**`) → `permitAll()` ; **tout le reste** →
 `authenticated()` (JWT valide + compte actif). Pour exiger **en plus** un rôle sur une route non
@@ -237,21 +301,21 @@ SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 - Les rôles viennent de `AuthUser.getRoles()` : illimités, valeurs brutes (`"ADMIN"`, `"AQP"`, …).
 - L'ordre des `requestMatchers` compte : les règles spécifiques avant `anyRequest().authenticated()`.
 
-## 7. Claims du JWT (HS512)
+## 8. Claims du JWT (HS512)
 
 `sub` = email, `id`, `email`, `roles` (liste illimitée, valeurs brutes), `status` (Boolean), `exp`.
 Signature : `zrouga.security.jwt-secret`.
 
 Côté Spring Security, les autorités sont construites avec le préfixe standard `ROLE_` :
-utilisez `@PreAuthorize("hasRole('ADMIN')")` (et non `hasAuthority('ADMIN')`) — détails §6.
+utilisez `@PreAuthorize("hasRole('ADMIN')")` (et non `hasAuthority('ADMIN')`) — détails §7.
 
-## 8. Comptes désactivés (status)
+## 9. Comptes désactivés (status)
 
 - `AuthUser.getStatus()` vaut `false` → **connexion refusée** (401) ;
 - un JWT existant d'un compte désactivé est **refusé à chaque requête** (le claim `status` est vérifié) ;
 - `null` = pas d'information → compte actif.
 
-## 9. Refresh token
+## 10. Refresh token
 
 - **Rotation** : chaque `/refreshtoken` révoque l'ancien jeton et en émet un nouveau. Toute réutilisation d'un jeton déjà tourné répond 403 (détection de vol).
 - **Connexion** : un nouvel `signin` révoque tous les refresh tokens précédents de l'utilisateur (politique mono-session).
@@ -260,14 +324,14 @@ utilisez `@PreAuthorize("hasRole('ADMIN')")` (et non `hasAuthority('ADMIN')`) �
 - **Purge des expirés** : optionnelle — `zrouga.security.cleanup-enabled=true` active une purge périodique (`cleanup-fixed-delay-ms`).
 - Personnalisable : déclarez votre propre bean `RefreshTokenStore` — les auto-configs reculent.
 
-## 10. Rate-limiting (anti-bruteforce)
+## 11. Rate-limiting (anti-bruteforce)
 
 5 tentatives échouées par e-mail puis 15 minutes de blocage (429), par défaut — réglable via
 `rate-limit-max-attempts` / `rate-limit-window-ms`. Une connexion réussie remet le compteur à zéro.
 Le même compteur protège l'inscription (clé `signup:<email>`).
 Personnalisable : déclarez votre propre bean `LoginRateLimiter` (base de données, Redis, …).
 
-## 11. Personnalisation
+## 12. Personnalisation
 
 Tous les beans suivants sont surchargeables — déclarez le vôtre et celui du starter est remplacé :
 
@@ -283,14 +347,17 @@ Tous les beans suivants sont surchargeables — déclarez le vôtre et celui du 
 | `RefreshTokenService` | jetons d'expiration configurable |
 | `RefreshTokenStore` | JPA si disponible, sinon mémoire |
 | `LoginRateLimiter` | en mémoire (fenêtre par e-mail) |
-| `AuthService`, `AuthResource`, `AuthEntryPointJwt`, `TokenControllerAdvice` | implémentations par défaut |
+| `PasswordResetTokenStore` | en mémoire (jetons de réinitialisation) |
+| `PasswordResetEmailSender` | SMTP (`spring.mail.*`), seulement si `reset-enabled=true` |
+| `AuthUserPasswordUpdater` | SPI projet hôte (requis si `reset-enabled=true`) |
+| `AuthService`, `AuthResource`, `AuthEntryPointJwt`, `TokenControllerAdvice`, `PasswordResetService` | implémentations par défaut |
 
 - Exclusion complète : `spring.autoconfigure.exclude=zrouga.spring.security.autoconfigure.ZrougaSecurityAutoConfiguration`
 - `AuthUserCreator` : SPI fournie par le projet hôte (voir §5) — sans elle, `/signup` répond 501.
 - CORS : à définir côté projet hôte (aucune origine codée en dur côté starter).
 - `@CrossOrigin` supprimé : configurez le CORS via votre `CorsConfigurationSource` / `WebMvcConfigurer`.
 
-## 12. Build / publication (mainteneur)
+## 13. Build / publication (mainteneur)
 
 ```powershell
 .\mvnw.cmd verify          # tests + jacoco + jar + sources + javadoc

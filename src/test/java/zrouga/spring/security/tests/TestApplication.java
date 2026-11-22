@@ -8,7 +8,9 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import zrouga.spring.security.AuthUser;
 import zrouga.spring.security.AuthUserCreator;
+import zrouga.spring.security.AuthUserPasswordUpdater;
 import zrouga.spring.security.AuthUserProvider;
+import zrouga.spring.security.PasswordResetEmailSender;
 import zrouga.spring.security.payload.MessageResponse;
 
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -59,6 +61,38 @@ public class TestApplication {
             long id = nextId.getAndIncrement();
             register(new TestUser(id, email, encodedPassword, List.of("USER"), true));
         };
+    }
+
+    @Bean
+    public AuthUserPasswordUpdater authUserPasswordUpdater() {
+        return (email, encodedPassword) -> {
+            AuthUser existing = byEmail.get(email);
+            if (existing != null) {
+                TestUser updated = new TestUser(existing.getId(), email, encodedPassword,
+                        existing.getRoles(), existing.getStatus());
+                byId.put(updated.getId(), updated);
+                byEmail.put(email, updated);
+            }
+        };
+    }
+
+    @Bean
+    public FakeEmailSender fakeEmailSender() {
+        return new FakeEmailSender();
+    }
+
+    /** Capte l'e-mail de réinitialisation au lieu d'envoyer un vrai SMTP en test. */
+    public static class FakeEmailSender implements PasswordResetEmailSender {
+
+        public volatile String lastEmail;
+
+        public volatile String lastToken;
+
+        @Override
+        public void send(String email, String rawToken) {
+            this.lastEmail = email;
+            this.lastToken = rawToken;
+        }
     }
 
     private void register(TestUser user) {

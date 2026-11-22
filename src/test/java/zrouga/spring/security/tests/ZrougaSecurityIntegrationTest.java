@@ -31,7 +31,10 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+        "zrouga.security.reset-enabled=true",
+        "zrouga.security.reset-base-url=https://front.test/reset-password"
+})
 @AutoConfigureMockMvc
 class ZrougaSecurityIntegrationTest {
 
@@ -40,6 +43,9 @@ class ZrougaSecurityIntegrationTest {
 
     @Autowired
     private RefreshTokenStore refreshTokenStore;
+
+    @Autowired
+    private TestApplication.FakeEmailSender emailSender;
 
     private String signin(String email) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/signin")
@@ -306,6 +312,116 @@ class ZrougaSecurityIntegrationTest {
                         .content("{\"email\":\"court@test.com\",\"password\":\"abc\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message", containsString("password")));
+    }
+
+    @Test
+    void forgotPasswordPuisResetPasswordRevoqueLesJetonAncienMotDePasse() throws Exception {
+        String email = "reset-" + System.nanoTime() + "@test.com";
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"password\":\"MotDePasse123\"}"))
+                .andExpect(status().isCreated());
+
+        MvcResult signinResult = mockMvc.perform(post("/api/auth/signin")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"password\":\"MotDePasse123\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String oldRefreshToken = JsonPath.read(signinResult.getResponse().getContentAsString(), "$.refreshToken");
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", containsString("reset email has been sent")));
+
+        assertThat(emailSender.lastEmail).isEqualTo(email);
+        String resetToken = emailSender.lastToken;
+        assertThat(resetToken).isNotBlank();
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"" + resetToken + "\",\"password\":\"NouveauMotDePasse9\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Password has been reset successfully."));
+
+        mockMvc.perform(post("/api/auth/signin")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"password\":\"MotDePasse123\"}"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/auth/signin")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"password\":\"NouveauMotDePasse9\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty());
+
+        mockMvc.perform(post("/api/auth/refreshtoken")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + oldRefreshToken + "\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Refresh token is not in database!"));
+    }
+
+    @Test
+    void forgotPasswordEmailInconnuRenvoie200SansEnvoi() throws Exception {
+        emailSender.lastEmail = null;
+        emailSender.lastToken = null;
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"inconnu-" + System.nanoTime() + "@test.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", containsString("reset email has been sent")));
+
+        assertThat(emailSender.lastToken).isNull();
+    }
+
+    @Test
+    void resetPasswordJetonInvalideRenvoie400Unifie() throws Exception {
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"jeton-invalide\",\"password\":\"MotDePasse123\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value("Invalid or expired reset token."))
+                .andExpect(jsonPath("$.timestamp").isNotEmpty());
+    }
+
+    @Test
+    void resetPasswordJetonReutiliseRenvoie400() throws Exception {
+        String email = "reuse-" + System.nanoTime() + "@test.com";
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"password\":\"MotDePasse123\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\"}"))
+                .andExpect(status().isOk());
+
+        String resetToken = emailSender.lastToken;
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"" + resetToken + "\",\"password\":\"NouveauMotDePasse9\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"" + resetToken + "\",\"password\":\"EncoreUnAutre99\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid or expired reset token."));
+    }
+
+    @Test
+    void resetPasswordMotDePasseTropCourtRenvoie400() throws Exception {
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"nimportequel\",\"password\":\"abc\"}"))
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("password")));
     }
 }

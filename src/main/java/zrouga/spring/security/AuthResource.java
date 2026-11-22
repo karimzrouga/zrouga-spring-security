@@ -1,6 +1,8 @@
 package zrouga.spring.security;
 
+import zrouga.spring.security.payload.ForgotPasswordRequest;
 import zrouga.spring.security.payload.LoginRequest;
+import zrouga.spring.security.payload.ResetPasswordRequest;
 import zrouga.spring.security.payload.SignupRequest;
 import zrouga.spring.security.payload.TokenRefreshRequest;
 
@@ -19,9 +21,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthResource {
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
 
-    public AuthResource(AuthService authService) {
+    public AuthResource(AuthService authService, PasswordResetService passwordResetService) {
         this.authService = authService;
+        this.passwordResetService = passwordResetService;
     }
 
     @PostMapping("/signin")
@@ -32,6 +36,16 @@ public class AuthResource {
     @PostMapping("/signup")
     public ResponseEntity<?> signup(@Valid @RequestBody SignupRequest signupRequest) {
         return ResponseEntity.status(HttpStatus.CREATED).body(authService.signup(signupRequest));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        return ResponseEntity.ok(passwordResetService.forgotPassword(request));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        return ResponseEntity.ok(passwordResetService.resetPassword(request));
     }
 
     @PostMapping("/refreshtoken")

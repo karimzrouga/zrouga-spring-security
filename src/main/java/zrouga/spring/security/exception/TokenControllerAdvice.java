@@ -37,6 +37,18 @@ public class TokenControllerAdvice {
         return error(HttpStatus.NOT_IMPLEMENTED, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(PasswordResetNotSupportedException.class)
+    public ResponseEntity<ApiError> handlePasswordResetNotSupportedException(
+            PasswordResetNotSupportedException ex, WebRequest request) {
+        return error(HttpStatus.NOT_IMPLEMENTED, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(InvalidResetTokenException.class)
+    public ResponseEntity<ApiError> handleInvalidResetTokenException(
+            InvalidResetTokenException ex, WebRequest request) {
+        return error(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> handleValidationException(MethodArgumentNotValidException ex, WebRequest request) {
         String message = ex.getBindingResult().getFieldErrors().stream()
