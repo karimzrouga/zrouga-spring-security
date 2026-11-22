@@ -11,6 +11,8 @@ import zrouga.spring.security.exception.TokenControllerAdvice;
 import zrouga.spring.security.jwt.AuthEntryPointJwt;
 import zrouga.spring.security.jwt.AuthTokenFilter;
 import zrouga.spring.security.jwt.JwtUtils;
+import zrouga.spring.security.ratelimit.InMemoryLoginRateLimiter;
+import zrouga.spring.security.ratelimit.LoginRateLimiter;
 
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.ObjectProvider;
@@ -21,6 +23,7 @@ import org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoCon
 import org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -29,11 +32,17 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+/**
+ * Configuration auto-activée du starter : sécurité stateless JWT, endpoints d'authentification
+ * et tous les beans de base. Chaque bean est surchargeable — déclarez le vôtre et celui du
+ * starter est remplacé.
+ */
 @AutoConfiguration(before = { ServletWebSecurityAutoConfiguration.class,
         UserDetailsServiceAutoConfiguration.class })
 @EnableWebSecurity
@@ -48,43 +57,48 @@ public class ZrougaSecurityAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(AuthEntryPointJwt.class)
     public AuthEntryPointJwt authEntryPointJwt() {
         return new AuthEntryPointJwt();
     }
 
     @Bean
-    public AuthTokenFilter authenticationJwtTokenFilter(
-            JwtUtils jwtUtils,
-            UserDetailsServiceImpl userDetailsService) {
-        return new AuthTokenFilter(jwtUtils, userDetailsService);
+    @ConditionalOnMissingBean(AuthTokenFilter.class)
+    public AuthTokenFilter authenticationJwtTokenFilter(JwtUtils jwtUtils) {
+        return new AuthTokenFilter(jwtUtils);
     }
 
     @Bean
+    @ConditionalOnMissingBean(AuthenticationProvider.class)
     public DaoAuthenticationProvider authenticationProvider(
             PasswordEncoder passwordEncoder,
-            UserDetailsServiceImpl userDetailsService) {
+            UserDetailsService userDetailsService) {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder);
         return provider;
     }
 
     @Bean
+    @ConditionalOnMissingBean(AuthenticationManager.class)
     public AuthenticationManager authenticationManager(
             AuthenticationConfiguration authenticationConfiguration) throws Exception {
         return authenticationConfiguration.getAuthenticationManager();
     }
 
     @Bean
+    @ConditionalOnMissingBean(JwtUtils.class)
     public JwtUtils jwtUtils(ZrougaSecurityProperties properties) {
         return new JwtUtils(properties);
     }
 
     @Bean
-    public UserDetailsServiceImpl userDetailsService(AuthUserProvider userRepository) {
-        return new UserDetailsServiceImpl(userRepository);
+    @ConditionalOnMissingBean(UserDetailsService.class)
+    public UserDetailsServiceImpl userDetailsService(ObjectProvider<AuthUserProvider> userProvider) {
+        return new UserDetailsServiceImpl(userProvider);
     }
 
     @Bean
+    @ConditionalOnMissingBean(RefreshTokenService.class)
     public RefreshTokenService refreshTokenService(
             RefreshTokenStore refreshTokenStore,
             ZrougaSecurityProperties properties) {
@@ -92,20 +106,31 @@ public class ZrougaSecurityAutoConfiguration {
     }
 
     @Bean
-    public AuthService authService(
-            AuthenticationManager authenticationManager,
-            AuthUserProvider userRepository,
-            JwtUtils jwtUtils,
-            RefreshTokenService refreshTokenService) {
-        return new AuthService(authenticationManager, userRepository, jwtUtils, refreshTokenService);
+    @ConditionalOnMissingBean(LoginRateLimiter.class)
+    public LoginRateLimiter loginRateLimiter(ZrougaSecurityProperties properties) {
+        return new InMemoryLoginRateLimiter(properties);
     }
 
     @Bean
+    @ConditionalOnMissingBean(AuthService.class)
+    public AuthService authService(
+            AuthenticationManager authenticationManager,
+            ObjectProvider<AuthUserProvider> userProvider,
+            JwtUtils jwtUtils,
+            RefreshTokenService refreshTokenService,
+            LoginRateLimiter loginRateLimiter) {
+        return new AuthService(authenticationManager, userProvider, jwtUtils, refreshTokenService,
+                loginRateLimiter);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(AuthResource.class)
     public AuthResource authResource(AuthService authService) {
         return new AuthResource(authService);
     }
 
     @Bean
+    @ConditionalOnMissingBean(TokenControllerAdvice.class)
     public TokenControllerAdvice tokenControllerAdvice() {
         return new TokenControllerAdvice();
     }
@@ -114,7 +139,7 @@ public class ZrougaSecurityAutoConfiguration {
     @ConditionalOnMissingBean(SecurityFilterChain.class)
     public SecurityFilterChain filterChain(
             HttpSecurity http,
-            DaoAuthenticationProvider authenticationProvider,
+            AuthenticationProvider authenticationProvider,
             AuthTokenFilter authenticationJwtTokenFilter,
             AuthEntryPointJwt unauthorizedHandler,
             ZrougaSecurityProperties properties) throws Exception {
@@ -147,9 +172,7 @@ public class ZrougaSecurityAutoConfiguration {
     public InitializingBean zrougaAuthUserProviderRequired(ObjectProvider<AuthUserProvider> provider) {
         return () -> {
             if (provider.getIfAvailable() == null) {
-                throw new IllegalStateException(
-                        "zrouga.spring.security : aucun bean AuthUserProvider déclaré. "
-                                + "Implémentez zrouga.spring.security.AuthUserProvider et déclarez-la comme @Component ou @Bean.");
+                throw new IllegalStateException(AuthUserProvider.MISSING_BEAN_MESSAGE);
             }
         };
     }

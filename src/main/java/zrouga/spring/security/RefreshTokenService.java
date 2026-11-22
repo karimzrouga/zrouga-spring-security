@@ -26,10 +26,18 @@ public class RefreshTokenService {
     public StoredRefreshToken verifyExpiration(StoredRefreshToken token) {
         if (token.expiryDate().compareTo(Instant.now()) < 0) {
             refreshTokenStore.deleteByToken(token.token());
-            throw new TokenRefreshException(token.token(),
-                    "Refresh token was expired. Please make a new signin request");
+            throw new TokenRefreshException("Refresh token was expired. Please make a new signin request");
         }
         return token;
+    }
+
+    /**
+     * Révoque un refresh token (utilisé lors de la rotation).
+     *
+     * @param token la valeur du jeton à révoquer
+     */
+    public void revoke(String token) {
+        refreshTokenStore.deleteByToken(token);
     }
 
     public int deleteByUserId(Long userId) {

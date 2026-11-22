@@ -8,15 +8,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
+import java.util.Base64;
+import java.util.Date;
 import java.util.List;
 
 import zrouga.spring.security.RefreshTokenStore;
 import zrouga.spring.security.StoredRefreshToken;
+import zrouga.spring.security.TestSecret;
+
+import javax.crypto.SecretKey;
 
 import com.jayway.jsonpath.JsonPath;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,9 +34,6 @@ import org.springframework.test.web.servlet.MvcResult;
 @SpringBootTest
 @AutoConfigureMockMvc
 class ZrougaSecurityIntegrationTest {
-
-    private static final String SECRET =
-            "ZROUGATESTSECRET0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     @Autowired
     private MockMvc mockMvc;
@@ -48,7 +51,8 @@ class ZrougaSecurityIntegrationTest {
     }
 
     private Claims parse(String token) {
-        return Jwts.parser().setSigningKey(SECRET).parseClaimsJws(token).getBody();
+        SecretKey key = Keys.hmacShaKeyFor(Base64.getDecoder().decode(TestSecret.SECRET));
+        return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
     }
 
     @Test
@@ -78,7 +82,9 @@ class ZrougaSecurityIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401))
                 .andExpect(jsonPath("$.error").value("Unauthorized"))
-                .andExpect(jsonPath("$.message").isNotEmpty());
+                .andExpect(jsonPath("$.message").isNotEmpty())
+                .andExpect(jsonPath("$.path").isNotEmpty())
+                .andExpect(jsonPath("$.timestamp").isNotEmpty());
     }
 
     @Test
@@ -100,20 +106,67 @@ class ZrougaSecurityIntegrationTest {
         assertThat(claims.get("email")).isEqualTo(TestApplication.ADMIN_EMAIL);
         assertThat((List<Object>) claims.get("roles")).containsExactly("ADMIN", "CONTROLEUR");
         assertThat(claims.get("status")).isEqualTo(Boolean.TRUE);
-        assertThat(claims.getExpiration()).isAfter(java.util.Date.from(Instant.now()));
+        assertThat(claims.getExpiration()).isAfter(Date.from(Instant.now()));
     }
 
     @Test
-    void utilisateurInactifPeutSeConnecterAvecStatusFalse() throws Exception {
-        String token = signin(TestApplication.INACTIF_EMAIL);
-
-        Claims claims = parse(token);
-        assertThat((List<Object>) claims.get("roles")).containsExactly("AQP");
-        assertThat(claims.get("status")).isEqualTo(Boolean.FALSE);
+    void utilisateurInactifNePeutPasSeConnecter() throws Exception {
+        mockMvc.perform(post("/api/auth/signin")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + TestApplication.INACTIF_EMAIL + "\",\"password\":\""
+                                + TestApplication.PASSWORD + "\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("Unauthorized"));
     }
 
     @Test
-    void refreshtokenRenvoieNouveauAccessToken() throws Exception {
+    void jetonValideDeCompteInactifEstRefuse() throws Exception {
+        SecretKey key = Keys.hmacShaKeyFor(Base64.getDecoder().decode(TestSecret.SECRET));
+        String token = Jwts.builder()
+                .setSubject(TestApplication.INACTIF_EMAIL)
+                .claim("id", 2L)
+                .claim("email", TestApplication.INACTIF_EMAIL)
+                .claim("roles", List.of("AQP"))
+                .claim("status", false)
+                .setExpiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(key, Jwts.SIG.HS512)
+                .compact();
+
+        mockMvc.perform(get("/api/hello").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void headerAuthorizationMalformeRenvoie401() throws Exception {
+        mockMvc.perform(get("/api/hello").header("Authorization", "Bearer abc.def.ghi"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
+    }
+
+    @Test
+    void refreshtokenRenvoieNouveauAccessTokenEtUnNouveauRefreshToken() throws Exception {
+        MvcResult signinResult = mockMvc.perform(post("/api/auth/signin")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + TestApplication.ADMIN_EMAIL + "\",\"password\":\""
+                                + TestApplication.PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String refreshToken = JsonPath.read(signinResult.getResponse().getContentAsString(), "$.refreshToken");
+
+        MvcResult refreshResult = mockMvc.perform(post("/api/auth/refreshtoken")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andReturn();
+
+        String rotated = JsonPath.read(refreshResult.getResponse().getContentAsString(), "$.refreshToken");
+        assertThat(rotated).isNotEqualTo(refreshToken);
+    }
+
+    @Test
+    void refreshtokenRefuseLaReutilisationDUnJetonTourne() throws Exception {
         MvcResult signinResult = mockMvc.perform(post("/api/auth/signin")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + TestApplication.ADMIN_EMAIL + "\",\"password\":\""
@@ -125,20 +178,25 @@ class ZrougaSecurityIntegrationTest {
         mockMvc.perform(post("/api/auth/refreshtoken")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.refreshToken").value(refreshToken))
-                .andExpect(jsonPath("$.tokenType").value("Bearer"));
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/auth/refreshtoken")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Refresh token is not in database!"));
     }
 
     @Test
-    void refreshtokenInconnuRenvoie403() throws Exception {
+    void refreshtokenInconnuRenvoie403SansFuiteDuJeton() throws Exception {
         mockMvc.perform(post("/api/auth/refreshtoken")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refreshToken\":\"token-inexistant\"}"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.statusCode").value(403))
-                .andExpect(jsonPath("$.message", containsString("Failed for")));
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.error").value("Forbidden"))
+                .andExpect(jsonPath("$.message").value("Refresh token is not in database!"))
+                .andExpect(jsonPath("$.timestamp").isNotEmpty());
     }
 
     @Test
@@ -149,7 +207,7 @@ class ZrougaSecurityIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refreshToken\":\"" + expired.token() + "\"}"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.statusCode").value(403))
+                .andExpect(jsonPath("$.status").value(403))
                 .andExpect(jsonPath("$.message", containsString("expired")));
     }
 
@@ -181,5 +239,34 @@ class ZrougaSecurityIntegrationTest {
         mockMvc.perform(post("/api/auth/signout"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("No logged-in user. Nothing to log out."));
+    }
+
+    @Test
+    void tropDeTentativesEchoueesRenvoient429() throws Exception {
+        String body = "{\"email\":\"brute-force@test.com\",\"password\":\"mauvais\"}";
+
+        for (int i = 0; i < 5; i++) {
+            mockMvc.perform(post("/api/auth/signin").contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        mockMvc.perform(post("/api/auth/signin").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.status").value(429))
+                .andExpect(jsonPath("$.error").value("Too Many Requests"))
+                .andExpect(jsonPath("$.message", containsString("Trop de tentatives")));
+    }
+
+    @Test
+    void corpsDeRequeteInvalideRenvoie400Unifie() throws Exception {
+        mockMvc.perform(post("/api/auth/signin")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message", containsString("email")))
+                .andExpect(jsonPath("$.path").isNotEmpty())
+                .andExpect(jsonPath("$.timestamp").isNotEmpty());
     }
 }

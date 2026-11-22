@@ -1,3 +1,4 @@
 zrouga.spring.security.autoconfigure.ZrougaSecurityAutoConfiguration
 zrouga.spring.security.autoconfigure.ZrougaJpaRefreshTokenAutoConfiguration
 zrouga.spring.security.autoconfigure.ZrougaInMemoryRefreshTokenAutoConfiguration
+zrouga.spring.security.autoconfigure.ZrougaCleanupAutoConfiguration

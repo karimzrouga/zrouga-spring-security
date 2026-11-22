@@ -41,4 +41,14 @@ class InMemoryRefreshTokenStoreTest {
         assertThat(store.findByToken(deSept.token())).isEmpty();
         assertThat(store.findByToken(deHuit.token())).isPresent();
     }
+
+    @Test
+    void deleteExpiredSupprimeLesTokensExpirésSeuls() {
+        StoredRefreshToken expire = store.save(7L, Instant.now().minusSeconds(10));
+        StoredRefreshToken valide = store.save(7L, Instant.now().plusSeconds(60));
+
+        assertThat(store.deleteExpired(Instant.now())).isEqualTo(1);
+        assertThat(store.findByToken(expire.token())).isEmpty();
+        assertThat(store.findByToken(valide.token())).isPresent();
+    }
 }

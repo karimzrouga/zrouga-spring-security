@@ -3,19 +3,21 @@ package zrouga.spring.security;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 
 import zrouga.spring.security.jwt.JwtUtils;
 
+import javax.crypto.SecretKey;
+
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
 
 class JwtUtilsTest {
-
-    private static final String SECRET =
-            "ZROUGATESTSECRET0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     private record SimpleUser(Long id, String email, String password, List<String> roles, Boolean status)
             implements AuthUser {
@@ -48,13 +50,23 @@ class JwtUtilsTest {
 
     private ZrougaSecurityProperties properties(long expirationMs) {
         ZrougaSecurityProperties properties = new ZrougaSecurityProperties();
-        properties.setJwtSecret(SECRET);
+        properties.setJwtSecret(TestSecret.SECRET);
         properties.setJwtExpirationMs(expirationMs);
+        return properties;
+    }
+
+    private ZrougaSecurityProperties propertiesWithSecret(String secret) {
+        ZrougaSecurityProperties properties = new ZrougaSecurityProperties();
+        properties.setJwtSecret(secret);
         return properties;
     }
 
     private SimpleUser user() {
         return new SimpleUser(1L, "admin@test.com", "hash", List.of("ADMIN", "AQP"), true);
+    }
+
+    private SecretKey key(String secret) {
+        return Keys.hmacShaKeyFor(Base64.getDecoder().decode(secret));
     }
 
     @Test
@@ -68,7 +80,8 @@ class JwtUtilsTest {
         assertThat(jwtUtils.validateJwtToken(token)).isTrue();
         assertThat(jwtUtils.getUserNameFromJwtToken(token)).isEqualTo("admin@test.com");
 
-        Claims claims = Jwts.parser().setSigningKey(SECRET).parseClaimsJws(token).getBody();
+        Claims claims = Jwts.parser().verifyWith(key(TestSecret.SECRET)).build().parseSignedClaims(token)
+                .getPayload();
         assertThat(claims.getSubject()).isEqualTo("admin@test.com");
         assertThat(((Number) claims.get("id")).longValue()).isEqualTo(1L);
         assertThat(claims.get("email")).isEqualTo("admin@test.com");
@@ -98,11 +111,50 @@ class JwtUtilsTest {
     }
 
     @Test
+    void rejecteUnJetonSigneAvecUneAutreCle() {
+        String autreSecret = "AUTRESECRET0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        JwtUtils emetteur = new JwtUtils(propertiesWithSecret(autreSecret));
+        JwtUtils valideur = new JwtUtils(properties(3_600_000L));
+        SimpleUser user = user();
+
+        String token = emetteur.generateJwtToken(UserDetailsImpl.build(user), user);
+
+        assertThat(valideur.validateJwtToken(token)).isFalse();
+    }
+
+    @Test
+    void rejecteUnJetonAlgNone() {
+        JwtUtils jwtUtils = new JwtUtils(properties(3_600_000L));
+
+        String header = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString("{\"alg\":\"none\"}".getBytes(StandardCharsets.UTF_8));
+        String payload = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString("{\"sub\":\"admin@test.com\"}".getBytes(StandardCharsets.UTF_8));
+        String token = header + "." + payload + ".";
+
+        assertThat(jwtUtils.validateJwtToken(token)).isFalse();
+    }
+
+    @Test
     void refuseUnSecretVide() {
         ZrougaSecurityProperties properties = new ZrougaSecurityProperties();
 
         assertThatThrownBy(() -> new JwtUtils(properties))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("zrouga.security.jwt-secret");
+    }
+
+    @Test
+    void refuseUnSecretTropCourt() {
+        assertThatThrownBy(() -> new JwtUtils(propertiesWithSecret("QUJD")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("64 octets");
+    }
+
+    @Test
+    void refuseUnSecretNonBase64() {
+        assertThatThrownBy(() -> new JwtUtils(propertiesWithSecret("________________________")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Base64");
     }
 }

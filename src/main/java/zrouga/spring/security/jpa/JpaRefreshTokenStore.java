@@ -1,6 +1,7 @@
 package zrouga.spring.security.jpa;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,11 +34,12 @@ public class JpaRefreshTokenStore implements RefreshTokenStore {
     @Override
     @Transactional(readOnly = true)
     public Optional<StoredRefreshToken> findByToken(String token) {
-        return entityManager
+        List<RefreshTokenEntity> results = entityManager
                 .createQuery("SELECT r FROM refreshtoken r WHERE r.token = :token", RefreshTokenEntity.class)
                 .setParameter("token", token)
-                .getResultList()
-                .stream()
+                .setMaxResults(1)
+                .getResultList();
+        return results.stream()
                 .findFirst()
                 .map(entity -> new StoredRefreshToken(entity.getToken(), entity.getUserId(), entity.getExpiryDate()));
     }
@@ -55,6 +57,14 @@ public class JpaRefreshTokenStore implements RefreshTokenStore {
     public int deleteByUserId(long userId) {
         return entityManager.createQuery("DELETE FROM refreshtoken r WHERE r.userId = :userId")
                 .setParameter("userId", userId)
+                .executeUpdate();
+    }
+
+    @Override
+    @Transactional
+    public int deleteExpired(Instant now) {
+        return entityManager.createQuery("DELETE FROM refreshtoken r WHERE r.expiryDate < :now")
+                .setParameter("now", now)
                 .executeUpdate();
     }
 }

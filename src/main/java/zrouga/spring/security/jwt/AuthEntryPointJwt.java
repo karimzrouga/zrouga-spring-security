@@ -1,8 +1,8 @@
 package zrouga.spring.security.jwt;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
+
+import zrouga.spring.security.payload.ApiError;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,21 +19,18 @@ public class AuthEntryPointJwt implements AuthenticationEntryPoint {
 
     private static final Logger logger = LoggerFactory.getLogger(AuthEntryPointJwt.class);
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException authException)
             throws IOException, ServletException {
-        logger.error("Unauthorized error: {}", authException.getMessage());
+        logger.warn("Accès non autorisé sur {} : {}", request.getRequestURI(), authException.getMessage());
 
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
 
-        final Map<String, Object> body = new HashMap<>();
-        body.put("status", HttpServletResponse.SC_UNAUTHORIZED);
-        body.put("error", "Unauthorized");
-        body.put("message", authException.getMessage());
-        body.put("path", request.getServletPath());
-
-        final ObjectMapper mapper = new ObjectMapper();
-        mapper.writeValue(response.getOutputStream(), body);
+        ApiError body = ApiError.of(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized",
+                authException.getMessage(), request.getRequestURI());
+        MAPPER.writeValue(response.getOutputStream(), body);
     }
 }

@@ -1,0 +1,9 @@
+{
+  "properties": [
+    {
+      "name": "zrouga.security.jwt-secret",
+      "type": "java.lang.String",
+      "description": "Secret de signature JWT en Base64 standard, décodant à au moins 64 octets (512 bits) pour HS512. Obligatoire. Génération : openssl rand -base64 64"
+    }
+  ]
+}

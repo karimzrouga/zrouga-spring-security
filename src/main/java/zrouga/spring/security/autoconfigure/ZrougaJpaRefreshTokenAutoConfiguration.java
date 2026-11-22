@@ -8,14 +8,20 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.persistence.autoconfigure.EntityScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.orm.jpa.SharedEntityManagerCreator;
 
-@AutoConfiguration
+/**
+ * Store JPA des refresh tokens : actif uniquement quand une {@code EntityManagerFactory}
+ * existe réellement (starter data-jpa présent et JPA non exclu).
+ */
+@AutoConfiguration(afterName = "org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration")
 @ConditionalOnClass(EntityManager.class)
+@ConditionalOnBean(EntityManagerFactory.class)
 @ConditionalOnMissingBean(RefreshTokenStore.class)
 @EntityScan(basePackageClasses = RefreshTokenEntity.class)
 public class ZrougaJpaRefreshTokenAutoConfiguration {

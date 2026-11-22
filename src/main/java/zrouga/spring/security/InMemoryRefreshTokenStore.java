@@ -37,4 +37,15 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
         }
         return deleted;
     }
+
+    @Override
+    public int deleteExpired(Instant now) {
+        int deleted = 0;
+        for (StoredRefreshToken stored : tokens.values()) {
+            if (stored.expiryDate().isBefore(now) && tokens.remove(stored.token(), stored)) {
+                deleted++;
+            }
+        }
+        return deleted;
+    }
 }
