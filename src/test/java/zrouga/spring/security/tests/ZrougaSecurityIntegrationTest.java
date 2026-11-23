@@ -429,4 +429,35 @@ class ZrougaSecurityIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("password")));
     }
+
+    @Test
+    void reutilisationDeRefreshTokenRevoqueTouteLaFamille() throws Exception {
+        MvcResult signin = mockMvc.perform(post("/api/auth/signin")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + TestApplication.ADMIN_EMAIL + "\",\"password\":\""
+                                + TestApplication.PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String premier = JsonPath.read(signin.getResponse().getContentAsString(), "$.refreshToken");
+
+        MvcResult rotation = mockMvc.perform(post("/api/auth/refreshtoken")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + premier + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String second = JsonPath.read(rotation.getResponse().getContentAsString(), "$.refreshToken");
+
+        // Réutilisation du jeton déjà révoqué = vol potentiel : refus + famille entière révoquée.
+        mockMvc.perform(post("/api/auth/refreshtoken")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + premier + "\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("refresh_token_rejected"));
+
+        mockMvc.perform(post("/api/auth/refreshtoken")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + second + "\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("refresh_token_rejected"));
+    }
 }
