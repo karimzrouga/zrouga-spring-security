@@ -8,10 +8,16 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class InMemoryRefreshTokenStore implements RefreshTokenStore {
 
+    /** Seuil au-delà duquel une purge opportuniste des expirés est lancée à chaque save. */
+    private static final int MAX_TRACKED_TOKENS = 10_000;
+
     private final Map<String, StoredRefreshToken> tokens = new ConcurrentHashMap<>();
 
     @Override
     public StoredRefreshToken save(long userId, Instant expiryDate) {
+        if (tokens.size() > MAX_TRACKED_TOKENS) {
+            deleteExpired(Instant.now());
+        }
         String raw = UUID.randomUUID().toString();
         StoredRefreshToken stored = new StoredRefreshToken(raw, userId, expiryDate, false);
         tokens.put(raw, stored);

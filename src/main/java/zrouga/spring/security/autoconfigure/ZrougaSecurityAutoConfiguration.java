@@ -30,6 +30,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration;
 import org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -152,8 +153,9 @@ public class ZrougaSecurityAutoConfiguration {
     @ConditionalOnProperty(prefix = "zrouga.security", name = "reset-enabled", havingValue = "true")
     public SmtpPasswordResetEmailSender smtpPasswordResetEmailSender(
             ObjectProvider<JavaMailSender> mailSender,
-            ZrougaSecurityProperties properties) {
-        return new SmtpPasswordResetEmailSender(mailSender, properties);
+            ZrougaSecurityProperties properties,
+            ObjectProvider<TaskExecutor> taskExecutor) {
+        return new SmtpPasswordResetEmailSender(mailSender, properties, taskExecutor);
     }
 
     @Bean

@@ -1,5 +1,6 @@
 package zrouga.spring.security.autoconfigure;
 
+import zrouga.spring.security.PasswordResetTokenStore;
 import zrouga.spring.security.RefreshTokenStore;
 import zrouga.spring.security.RefreshTokenCleanup;
 
@@ -9,8 +10,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * Purge périodique des refresh tokens expirés — optionnelle, activée par
- * {@code zrouga.security.cleanup-enabled=true}.
+ * Purge périodique des jetons expirés (refresh tokens et jetons de réinitialisation) —
+ * optionnelle, activée par {@code zrouga.security.cleanup-enabled=true}.
  */
 @AutoConfiguration(after = ZrougaSecurityAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "zrouga.security", name = "cleanup-enabled", havingValue = "true")
@@ -18,7 +19,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class ZrougaCleanupAutoConfiguration {
 
     @Bean
-    public RefreshTokenCleanup zrougaRefreshTokenCleanup(RefreshTokenStore refreshTokenStore) {
-        return new RefreshTokenCleanup(refreshTokenStore);
+    public RefreshTokenCleanup zrougaRefreshTokenCleanup(RefreshTokenStore refreshTokenStore,
+            PasswordResetTokenStore passwordResetTokenStore) {
+        return new RefreshTokenCleanup(refreshTokenStore, passwordResetTokenStore);
     }
 }
