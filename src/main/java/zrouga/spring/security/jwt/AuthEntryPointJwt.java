@@ -24,12 +24,12 @@ public class AuthEntryPointJwt implements AuthenticationEntryPoint {
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException authException)
             throws IOException, ServletException {
-        logger.warn("Accès non autorisé sur {} : {}", request.getRequestURI(), authException.getMessage());
+        logger.debug("Accès non autorisé sur {} : {}", request.getRequestURI(), authException.getMessage());
 
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
 
-        ApiError body = ApiError.of(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized",
+        ApiError body = ApiError.of(HttpServletResponse.SC_UNAUTHORIZED, "unauthorized", "Unauthorized",
                 authException.getMessage(), request.getRequestURI());
         MAPPER.writeValue(response.getOutputStream(), body);
     }

@@ -4,11 +4,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
 @ResponseStatus(HttpStatus.BAD_REQUEST)
-public class InvalidResetTokenException extends RuntimeException {
+public class InvalidResetTokenException extends AuthException {
 
     private static final long serialVersionUID = 1L;
 
     public InvalidResetTokenException(String message) {
-        super(message);
+        super("reset_token_invalid", message);
     }
 }

@@ -87,6 +87,7 @@ class ZrougaSecurityIntegrationTest {
         mockMvc.perform(get("/api/hello"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.code").value("unauthorized"))
                 .andExpect(jsonPath("$.error").value("Unauthorized"))
                 .andExpect(jsonPath("$.message").isNotEmpty())
                 .andExpect(jsonPath("$.path").isNotEmpty())
@@ -200,6 +201,7 @@ class ZrougaSecurityIntegrationTest {
                         .content("{\"refreshToken\":\"token-inexistant\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.code").value("refresh_token_rejected"))
                 .andExpect(jsonPath("$.error").value("Forbidden"))
                 .andExpect(jsonPath("$.message").value("Refresh token is not in database!"))
                 .andExpect(jsonPath("$.timestamp").isNotEmpty());
@@ -259,6 +261,7 @@ class ZrougaSecurityIntegrationTest {
         mockMvc.perform(post("/api/auth/signin").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.status").value(429))
+                .andExpect(jsonPath("$.code").value("rate_limit_exceeded"))
                 .andExpect(jsonPath("$.error").value("Too Many Requests"))
                 .andExpect(jsonPath("$.message", containsString("Too many attempts")));
     }
@@ -301,6 +304,7 @@ class ZrougaSecurityIntegrationTest {
                         .content("{\"email\":\"" + TestApplication.ADMIN_EMAIL + "\",\"password\":\"MotDePasse123\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.code").value("email_already_used"))
                 .andExpect(jsonPath("$.error").value("Conflict"))
                 .andExpect(jsonPath("$.message", containsString("already in use")));
     }
@@ -312,6 +316,7 @@ class ZrougaSecurityIntegrationTest {
                         .content("{\"email\":\"court@test.com\",\"password\":\"abc\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.code").value("validation_error"))
                 .andExpect(jsonPath("$.message", containsString("password")));
     }
 

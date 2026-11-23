@@ -77,8 +77,8 @@ class JwtUtilsTest {
         String token = jwtUtils.generateJwtToken(UserDetailsImpl.build(user));
 
         assertThat(token).isNotBlank();
-        assertThat(jwtUtils.validateJwtToken(token)).isTrue();
-        assertThat(jwtUtils.getUserNameFromJwtToken(token)).isEqualTo("admin@test.com");
+        assertThat(jwtUtils.parseClaims(token)).isNotNull();
+        assertThat(jwtUtils.parseClaims(token).getSubject()).isEqualTo("admin@test.com");
 
         Claims claims = Jwts.parser().verifyWith(key(TestSecret.SECRET)).build().parseSignedClaims(token)
                 .getPayload();
@@ -99,7 +99,7 @@ class JwtUtilsTest {
 
         String token = jwtUtils.generateJwtToken(UserDetailsImpl.build(user));
 
-        assertThat(jwtUtils.validateJwtToken(token)).isFalse();
+        assertThat(jwtUtils.parseClaims(token)).isNull();
     }
 
     @Test
@@ -109,7 +109,7 @@ class JwtUtilsTest {
 
         String token = jwtUtils.generateJwtToken(UserDetailsImpl.build(user)) + "x";
 
-        assertThat(jwtUtils.validateJwtToken(token)).isFalse();
+        assertThat(jwtUtils.parseClaims(token)).isNull();
     }
 
     @Test
@@ -121,7 +121,7 @@ class JwtUtilsTest {
 
         String token = emetteur.generateJwtToken(UserDetailsImpl.build(user));
 
-        assertThat(valideur.validateJwtToken(token)).isFalse();
+        assertThat(valideur.parseClaims(token)).isNull();
     }
 
     @Test
@@ -134,7 +134,7 @@ class JwtUtilsTest {
                 .encodeToString("{\"sub\":\"admin@test.com\"}".getBytes(StandardCharsets.UTF_8));
         String token = header + "." + payload + ".";
 
-        assertThat(jwtUtils.validateJwtToken(token)).isFalse();
+        assertThat(jwtUtils.parseClaims(token)).isNull();
     }
 
     @Test

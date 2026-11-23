@@ -212,11 +212,6 @@ class AutoConfigurationBackoffTest {
                 }
             };
         }
-
-        @Bean
-        org.springframework.web.cors.CorsConfigurationSource corsConfigurationSource() {
-            return new org.springframework.web.cors.UrlBasedCorsConfigurationSource();
-        }
     }
 
     @Configuration(proxyBeanMethods = false)

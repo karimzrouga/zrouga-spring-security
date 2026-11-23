@@ -3,7 +3,6 @@ package zrouga.spring.security;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
-import java.util.Locale;
 import java.util.Optional;
 
 import zrouga.spring.security.exception.InvalidResetTokenException;
@@ -75,7 +74,7 @@ public class PasswordResetService {
         requireEnabled();
 
         String email = request.getEmail();
-        rateLimiter.check("forgot:email:" + rateLimitKey(email));
+        rateLimiter.check("forgot:email:" + AuthSupport.rateLimitKey(email));
         rateLimiter.checkIp("forgot:ip:" + clientIp);
 
         provider().findByEmail(email).ifPresent(user -> {
@@ -146,8 +145,8 @@ public class PasswordResetService {
     private void requireEnabled() {
         if (!properties.isResetEnabled()) {
             throw new PasswordResetNotSupportedException(
-                    "Reset password non active : activez zrouga.security.reset-enabled=true "
-                            + "(et configurez reset-base-url, spring.mail.* et AuthUserPasswordUpdater).");
+                    "Password reset is not enabled: set zrouga.security.reset-enabled=true "
+                            + "(and configure reset-base-url, spring.mail.*, and AuthUserPasswordUpdater).");
         }
     }
 
@@ -156,11 +155,7 @@ public class PasswordResetService {
     }
 
     private AuthUserProvider provider() {
-        AuthUserProvider provider = userProvider.getIfAvailable();
-        if (provider == null) {
-            throw new IllegalStateException(AuthUserProvider.MISSING_BEAN_MESSAGE);
-        }
-        return provider;
+        return AuthSupport.provider(userProvider);
     }
 
     private AuthUserPasswordUpdater updater() {
@@ -185,9 +180,5 @@ public class PasswordResetService {
         byte[] bytes = new byte[32];
         RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
-
-    private static String rateLimitKey(String email) {
-        return email == null ? "" : email.toLowerCase(Locale.ROOT);
     }
 }

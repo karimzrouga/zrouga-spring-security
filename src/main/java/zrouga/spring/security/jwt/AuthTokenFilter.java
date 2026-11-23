@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Objects;
 
 import zrouga.spring.security.UserDetailsImpl;
-import zrouga.spring.security.payload.ApiError;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +46,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
                 }
             }
         } catch (Exception e) {
-            logger.warn("Impossible de définir l'authentification : {}", e.getMessage());
+            logger.debug("Impossible de définir l'authentification : {}", e.getMessage());
         }
 
         filterChain.doFilter(request, response);

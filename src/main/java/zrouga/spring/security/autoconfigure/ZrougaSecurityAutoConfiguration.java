@@ -47,6 +47,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 /**
  * Configuration auto-activée du starter : sécurité stateless JWT, endpoints d'authentification
@@ -226,11 +227,16 @@ public class ZrougaSecurityAutoConfiguration {
             AuthenticationProvider authenticationProvider,
             AuthTokenFilter authenticationJwtTokenFilter,
             AuthEntryPointJwt unauthorizedHandler,
-            ZrougaSecurityProperties properties) throws Exception {
+            ZrougaSecurityProperties properties,
+            ObjectProvider<CorsConfigurationSource> corsConfigurationSource) throws Exception {
+
+        // CORS n'est activé que si l'application fournit sa propre source —
+        // le starter n'impose aucune politique CORS.
+        if (corsConfigurationSource.getIfAvailable() != null) {
+            http.cors(Customizer.withDefaults());
+        }
 
         http
-                .cors(Customizer.withDefaults())
-
                 .csrf(AbstractHttpConfigurer::disable)
 
                 .exceptionHandling(exception -> exception

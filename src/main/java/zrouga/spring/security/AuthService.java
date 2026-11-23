@@ -1,6 +1,5 @@
 package zrouga.spring.security;
 
-import java.util.Locale;
 import java.util.Optional;
 
 import zrouga.spring.security.exception.EmailAlreadyUsedException;
@@ -54,7 +53,7 @@ public class AuthService {
     }
 
     public JwtResponse authenticateUser(LoginRequest loginRequest, String clientIp) {
-        String emailKey = "signin:email:" + rateLimitKey(loginRequest.getEmail());
+        String emailKey = "signin:email:" + AuthSupport.rateLimitKey(loginRequest.getEmail());
         String ipKey = "signin:ip:" + clientIp;
         rateLimiter.check(emailKey);
         rateLimiter.checkIp(ipKey);
@@ -117,10 +116,10 @@ public class AuthService {
         AuthUserCreator creator = creatorProvider.getIfAvailable();
         if (creator == null) {
             throw new SignupNotSupportedException(
-                    "Signup non configure : declarez un bean AuthUserCreator pour activer POST /api/auth/signup.");
+                    "Signup is not configured: declare an AuthUserCreator bean to enable POST /api/auth/signup.");
         }
 
-        String emailKey = "signup:email:" + rateLimitKey(request.getEmail());
+        String emailKey = "signup:email:" + AuthSupport.rateLimitKey(request.getEmail());
         String ipKey = "signup:ip:" + clientIp;
         rateLimiter.check(emailKey);
         rateLimiter.checkIp(ipKey);
@@ -154,14 +153,6 @@ public class AuthService {
     }
 
     private AuthUserProvider provider() {
-        AuthUserProvider provider = userProvider.getIfAvailable();
-        if (provider == null) {
-            throw new IllegalStateException(AuthUserProvider.MISSING_BEAN_MESSAGE);
-        }
-        return provider;
-    }
-
-    private String rateLimitKey(String email) {
-        return email == null ? "" : email.toLowerCase(Locale.ROOT);
+        return AuthSupport.provider(userProvider);
     }
 }

@@ -82,19 +82,11 @@ public class JwtUtils {
         try {
             return parser.parseSignedClaims(token).getPayload();
         } catch (ExpiredJwtException e) {
-            logger.warn("Jeton JWT expiré : {}", e.getMessage());
+            logger.debug("Jeton JWT expiré : {}", e.getMessage());
             return null;
         } catch (JwtException | IllegalArgumentException e) {
-            logger.warn("Jeton JWT invalide : {}", e.getMessage());
+            logger.debug("Jeton JWT invalide : {}", e.getMessage());
             return null;
         }
-    }
-
-    public boolean validateJwtToken(String authToken) {
-        return parseClaims(authToken) != null;
-    }
-
-    public String getUserNameFromJwtToken(String token) {
-        return parser.parseSignedClaims(token).getPayload().getSubject();
     }
 }

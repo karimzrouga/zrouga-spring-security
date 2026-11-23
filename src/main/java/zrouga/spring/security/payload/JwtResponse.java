@@ -1,39 +1,15 @@
 package zrouga.spring.security.payload;
 
-public class JwtResponse {
+/**
+ * Réponse de {@code POST /api/auth/signin}.
+ *
+ * @param token        access token JWT (Bearer)
+ * @param type         type d'authentification ({@code Bearer})
+ * @param refreshToken refresh token à présenter sur {@code /refreshtoken}
+ */
+public record JwtResponse(String token, String type, String refreshToken) {
 
-    private String token;
-
-    private String type = "Bearer";
-
-    private String refreshToken;
-
-    public JwtResponse(String accessToken, String refreshToken) {
-        this.token = accessToken;
-        this.refreshToken = refreshToken;
-    }
-
-    public String getToken() {
-        return token;
-    }
-
-    public void setToken(String token) {
-        this.token = token;
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
-
-    public String getRefreshToken() {
-        return refreshToken;
-    }
-
-    public void setRefreshToken(String refreshToken) {
-        this.refreshToken = refreshToken;
+    public JwtResponse(String token, String refreshToken) {
+        this(token, "Bearer", refreshToken);
     }
 }

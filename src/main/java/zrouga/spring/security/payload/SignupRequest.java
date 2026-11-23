@@ -12,6 +12,7 @@ public class SignupRequest {
 
     @NotBlank
     @Email
+    @Size(max = 254)
     private String email;
 
     @NotBlank
