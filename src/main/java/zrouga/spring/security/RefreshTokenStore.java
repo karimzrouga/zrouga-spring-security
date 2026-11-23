@@ -4,8 +4,13 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * Stockage des refresh tokens. Trois implémentations fournies : JPA, en mémoire,
- * et cette interface permet d'en fournir une personnalisée (déclarezz-la comme bean).
+ * Stockage des refresh tokens. Deux implémentations fournies : JPA (jetons hashés
+ * en base) et en mémoire — et cette interface permet d'en fournir une personnalisée
+ * (déclarez-la comme bean).
+ *
+ * <p>Sémantique 2.0 : {@link #revoke(String)} est <b>atomique</b> et retourne
+ * {@code false} si le jeton était déjà révoqué — c'est ce qui rend la rotation
+ * sûre en concurrence et permet de détecter une réutilisation.</p>
  */
 public interface RefreshTokenStore {
 
@@ -14,27 +19,31 @@ public interface RefreshTokenStore {
      *
      * @param userId     identifiant du propriétaire
      * @param expiryDate date d'expiration
-     * @return le jeton stocké (jeton brut, propriétaire, expiration)
+     * @return le jeton créé (jeton brut, propriétaire, expiration, non révoqué)
      */
     StoredRefreshToken save(long userId, Instant expiryDate);
 
     /**
-     * Recherche un jeton par sa valeur.
+     * Recherche un jeton par sa valeur brute — y compris s'il est révoqué
+     * (la lecture d'un jeton révoqué = détection de réutilisation).
      *
-     * @param token la valeur du jeton
+     * @param token le jeton brut
      * @return le jeton trouvé, ou {@link Optional#empty()}
      */
     Optional<StoredRefreshToken> findByToken(String token);
 
     /**
-     * Supprime un jeton (rotation, expiration).
+     * Révoque un jeton de façon atomique (rotation).
      *
-     * @param token la valeur du jeton
+     * @param token le jeton brut
+     * @return {@code true} si ce appel a fait passer le jeton de non révoqué à révoqué,
+     *         {@code false} s'il était déjà révoqué ou absent (course ou réutilisation)
      */
-    void deleteByToken(String token);
+    boolean revoke(String token);
 
     /**
-     * Supprime tous les jetons d'un utilisateur (déconnexion, nouvelle connexion).
+     * Supprime définitivement tous les jetons d'un utilisateur (déconnexion,
+     * révocation de famille sur vol détecté).
      *
      * @param userId identifiant du propriétaire
      * @return le nombre de jetons supprimés
@@ -42,8 +51,8 @@ public interface RefreshTokenStore {
     int deleteByUserId(long userId);
 
     /**
-     * Supprime tous les jetons expirés (purge). L'implémentation par défaut ne fait rien ;
-     * les implémentations fournies (JPA, mémoire) purge réellement.
+     * Supprime définitivement tous les jetons expirés (purge). L'implémentation par
+     * défaut ne fait rien ; les implémentations fournies (JPA, mémoire) purgent réellement.
      *
      * @param now date de référence
      * @return le nombre de jetons supprimés

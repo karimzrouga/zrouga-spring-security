@@ -22,8 +22,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  *
  * <p>Flux : {@code /forgot-password} génère un jeton usage unique (15 min par défaut),
  * l'e-mail SMTP contient le lien {@code reset-base-url?token=…} ; {@code /reset-password}
- * consomme le jeton, enregistre le nouveau hash via {@link AuthUserPasswordUpdater} et
- * révoque tous les refresh tokens du compte.</p>
+ * consomme le jeton <b>avant</b> toute mutation (claim first), enregistre le nouveau hash
+ * via {@link AuthUserPasswordUpdater} et révoque tous les refresh tokens du compte.</p>
  *
  * <p>Anti-énumération : {@code /forgot-password} répond toujours le même message,
  * que l'e-mail existe ou non.</p>
@@ -65,17 +65,21 @@ public class PasswordResetService {
      * Demande l'envoi de l'e-mail de réinitialisation.
      *
      * <p>Toujours 200 avec le même message (existence du compte non révélée) ; le
-     * rate-limit s'applique par e-mail (compte connu ou non, 5 tentatives / 15 min).</p>
+     * rate-limit s'applique par e-mail <b>et</b> par IP (compte connu ou non) et n'est
+     * jamais réinitialisé. Un seul jeton actif par compte.</p>
+     *
+     * @param request  la demande
+     * @param clientIp IP du client (rate-limit)
      */
-    public MessageResponse forgotPassword(ForgotPasswordRequest request) {
+    public MessageResponse forgotPassword(ForgotPasswordRequest request, String clientIp) {
         requireEnabled();
 
         String email = request.getEmail();
-        String key = "forgot:" + rateLimitKey(email);
-        rateLimiter.check(key);
-        rateLimiter.recordFailure(key);
+        rateLimiter.check("forgot:email:" + rateLimitKey(email));
+        rateLimiter.checkIp("forgot:ip:" + clientIp);
 
         provider().findByEmail(email).ifPresent(user -> {
+            tokenStore.deleteByEmail(email);
             String rawToken = generateToken();
             Instant expiry = Instant.now().plusMillis(properties.getResetTokenExpirationMs());
             tokenStore.save(new StoredResetToken(rawToken, email, expiry));
@@ -85,9 +89,16 @@ public class PasswordResetService {
         return new MessageResponse("If the account exists, a reset email has been sent.");
     }
 
-    /** Consomme le jeton et enregistre le nouveau mot de passe (usage unique, jeton 15 min). */
-    public MessageResponse resetPassword(ResetPasswordRequest request) {
+    /**
+     * Consomme le jeton et enregistre le nouveau mot de passe (usage unique, jeton 15 min).
+     *
+     * @param request  la demande
+     * @param clientIp IP du client (rate-limit anti-force brute du jeton)
+     */
+    public MessageResponse resetPassword(ResetPasswordRequest request, String clientIp) {
         requireEnabled();
+
+        rateLimiter.checkIp("reset:ip:" + clientIp);
 
         String rawToken = request.getToken();
         StoredResetToken stored = tokenStore.findByToken(rawToken)
@@ -100,8 +111,12 @@ public class PasswordResetService {
         AuthUser user = provider().findByEmail(stored.email())
                 .orElseThrow(() -> invalidToken());
 
+        // Claim first : un seul concurrent peut consommer le jeton.
+        if (!tokenStore.consume(rawToken)) {
+            throw invalidToken();
+        }
+
         updater().updatePassword(stored.email(), passwordEncoder.encode(request.getPassword()));
-        tokenStore.consume(rawToken);
         refreshTokenService.deleteByUserId(user.getId());
 
         return new MessageResponse("Password has been reset successfully.");

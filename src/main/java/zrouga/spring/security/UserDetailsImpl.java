@@ -30,19 +30,28 @@ public class UserDetailsImpl implements UserDetails {
 
     private Collection<? extends GrantedAuthority> authorities;
 
+    /** Rôles bruts (sans préfixe {@code ROLE_}) — jamais null. */
+    private List<String> roles;
+
+    /** Statut de l'utilisateur ({@code null} = actif). */
+    private Boolean status;
+
     public UserDetailsImpl(Long id, String username, String email, String password,
             Collection<? extends GrantedAuthority> authorities) {
-        this(id, username, email, password, authorities, true);
+        this(id, username, email, password, authorities, true, List.of(), null);
     }
 
     private UserDetailsImpl(Long id, String username, String email, String password,
-            Collection<? extends GrantedAuthority> authorities, boolean enabled) {
+            Collection<? extends GrantedAuthority> authorities, boolean enabled, List<String> roles,
+            Boolean status) {
         this.id = id;
         this.username = username;
         this.email = email;
         this.password = password;
         this.authorities = authorities;
         this.enabled = enabled;
+        this.roles = roles == null ? List.of() : roles;
+        this.status = status;
     }
 
     /**
@@ -53,8 +62,9 @@ public class UserDetailsImpl implements UserDetails {
      */
     public static UserDetailsImpl build(AuthUser user) {
         boolean enabled = user.getStatus() == null || user.getStatus();
+        List<String> roles = user.getRoles() == null ? List.of() : user.getRoles();
         return new UserDetailsImpl(user.getId(), user.getEmail(), user.getEmail(), user.getPassword(),
-                authoritiesFrom(user.getRoles()), enabled);
+                authoritiesFrom(roles), enabled, roles, user.getStatus());
     }
 
     /**
@@ -69,7 +79,9 @@ public class UserDetailsImpl implements UserDetails {
      */
     public static UserDetailsImpl buildFromToken(Long id, String email, Boolean status, List<String> roles) {
         boolean enabled = status == null || status;
-        return new UserDetailsImpl(id, email, email, null, authoritiesFrom(roles), enabled);
+        List<String> safeRoles = roles == null ? List.of() : roles;
+        return new UserDetailsImpl(id, email, email, null, authoritiesFrom(safeRoles), enabled, safeRoles,
+                status);
     }
 
     private static List<GrantedAuthority> authoritiesFrom(List<String> roles) {
@@ -94,6 +106,20 @@ public class UserDetailsImpl implements UserDetails {
 
     public String getEmail() {
         return email;
+    }
+
+    /**
+     * @return les rôles bruts, jamais {@code null} (liste vide si absent)
+     */
+    public List<String> getRoles() {
+        return roles;
+    }
+
+    /**
+     * @return le statut, ou {@code null} si non renseigné (= actif)
+     */
+    public Boolean getStatus() {
+        return status;
     }
 
     @Override

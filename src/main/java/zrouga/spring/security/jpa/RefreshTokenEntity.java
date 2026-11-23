@@ -7,10 +7,14 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
 @Entity(name = "refreshtoken")
-@Table(name = "refreshtoken")
+@Table(name = "refreshtoken", indexes = {
+        @Index(name = "idx_refreshtoken_user_id", columnList = "user_id"),
+        @Index(name = "idx_refreshtoken_expiry_date", columnList = "expiry_date")
+})
 public class RefreshTokenEntity {
 
     @Id
@@ -21,11 +25,15 @@ public class RefreshTokenEntity {
     @Column(name = "user_id", nullable = false)
     private long userId;
 
+    /** Empreinte SHA-256 du jeton — le brut n'est jamais stocké en base. */
     @Column(nullable = false, unique = true)
     private String token;
 
     @Column(nullable = false)
     private Instant expiryDate;
+
+    @Column(nullable = false)
+    private boolean revoked;
 
     public long getId() {
         return id;
@@ -53,5 +61,13 @@ public class RefreshTokenEntity {
 
     public void setExpiryDate(Instant expiryDate) {
         this.expiryDate = expiryDate;
+    }
+
+    public boolean isRevoked() {
+        return revoked;
+    }
+
+    public void setRevoked(boolean revoked) {
+        this.revoked = revoked;
     }
 }

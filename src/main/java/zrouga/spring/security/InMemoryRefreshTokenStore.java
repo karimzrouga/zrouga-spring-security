@@ -12,19 +12,29 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
 
     @Override
     public StoredRefreshToken save(long userId, Instant expiryDate) {
-        StoredRefreshToken stored = new StoredRefreshToken(UUID.randomUUID().toString(), userId, expiryDate);
-        tokens.put(stored.token(), stored);
+        String raw = UUID.randomUUID().toString();
+        StoredRefreshToken stored = new StoredRefreshToken(raw, userId, expiryDate, false);
+        tokens.put(raw, stored);
         return stored;
     }
 
     @Override
     public Optional<StoredRefreshToken> findByToken(String token) {
-        return Optional.ofNullable(tokens.get(token));
+        return token == null ? Optional.empty() : Optional.ofNullable(tokens.get(token));
     }
 
     @Override
-    public void deleteByToken(String token) {
-        tokens.remove(token);
+    public boolean revoke(String token) {
+        if (token == null) {
+            return false;
+        }
+        StoredRefreshToken current = tokens.get(token);
+        if (current == null || current.revoked()) {
+            return false;
+        }
+        StoredRefreshToken revoked = new StoredRefreshToken(
+                current.token(), current.userId(), current.expiryDate(), true);
+        return tokens.replace(token, current, revoked);
     }
 
     @Override

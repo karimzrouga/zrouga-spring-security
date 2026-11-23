@@ -18,7 +18,6 @@ import zrouga.spring.security.ratelimit.LoginRateLimiter;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -26,6 +25,8 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 public class AuthService {
+
+    private static final String REFRESH_UNKNOWN_MESSAGE = "Refresh token is not in database!";
 
     private final AuthenticationManager authenticationManager;
     private final ObjectProvider<AuthUserProvider> userProvider;
@@ -52,31 +53,26 @@ public class AuthService {
         this.creatorProvider = creatorProvider;
     }
 
-    public JwtResponse authenticateUser(LoginRequest loginRequest) {
-        String rateLimitKey = rateLimitKey(loginRequest.getEmail());
-        rateLimiter.check(rateLimitKey);
+    public JwtResponse authenticateUser(LoginRequest loginRequest, String clientIp) {
+        String emailKey = "signin:email:" + rateLimitKey(loginRequest.getEmail());
+        String ipKey = "signin:ip:" + clientIp;
+        rateLimiter.check(emailKey);
+        rateLimiter.checkIp(ipKey);
 
-        Authentication authentication;
-        try {
-            authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword()));
-        } catch (BadCredentialsException e) {
-            rateLimiter.recordFailure(rateLimitKey);
-            throw e;
-        }
-        rateLimiter.reset(rateLimitKey);
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword()));
+
+        rateLimiter.reset(emailKey);
+        rateLimiter.reset(ipKey);
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        AuthUser user = provider().findById(userDetails.getId())
-                .orElseThrow(() -> new UsernameNotFoundException("User Not Found with id: " + userDetails.getId()));
 
-        String jwt = jwtUtils.generateJwtToken(userDetails, user);
+        String jwt = jwtUtils.generateJwtToken(userDetails);
 
-        refreshTokenService.deleteByUserId(user.getId());
-
-        StoredRefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
+        refreshTokenService.deleteByUserId(userDetails.getId());
+        StoredRefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getId());
 
         return new JwtResponse(jwt, refreshToken.token());
     }
@@ -87,41 +83,57 @@ public class AuthService {
         Optional<StoredRefreshToken> refreshTokenOpt = refreshTokenService.findByToken(requestRefreshToken);
 
         if (refreshTokenOpt.isEmpty()) {
-            throw new TokenRefreshException("Refresh token is not in database!");
+            throw new TokenRefreshException(REFRESH_UNKNOWN_MESSAGE);
         }
 
-        StoredRefreshToken stored = refreshTokenService.verifyExpiration(refreshTokenOpt.get());
-        AuthUser user = provider().findById(stored.userId())
-                .orElseThrow(() -> new UsernameNotFoundException("User Not Found with id: " + stored.userId()));
+        StoredRefreshToken stored = refreshTokenOpt.get();
+
+        // Jeton déjà révoqué = réutilisation (vol potentiel) : famille entière révoquée.
+        if (stored.revoked()) {
+            refreshTokenService.deleteByUserId(stored.userId());
+            throw new TokenRefreshException(REFRESH_UNKNOWN_MESSAGE);
+        }
+
+        StoredRefreshToken verified = refreshTokenService.verifyExpiration(stored);
+        AuthUser user = provider().findById(verified.userId())
+                .orElseThrow(() -> new UsernameNotFoundException("User Not Found with id: " + verified.userId()));
 
         UserDetailsImpl userDetailsImpl = UserDetailsImpl.build(user);
 
-        String token = jwtUtils.generateJwtToken(userDetailsImpl, user);
+        String token = jwtUtils.generateJwtToken(userDetailsImpl);
 
-        // Rotation : révoque l'ancien jeton, émet un nouveau — toute réutilisation est refusée.
-        refreshTokenService.revoke(stored.token());
-        StoredRefreshToken rotated = refreshTokenService.createRefreshToken(user);
+        // Rotation atomique : false = un concurrent a déjà tourné ce jeton.
+        if (!refreshTokenService.revoke(verified.token())) {
+            refreshTokenService.deleteByUserId(verified.userId());
+            throw new TokenRefreshException(REFRESH_UNKNOWN_MESSAGE);
+        }
+
+        StoredRefreshToken rotated = refreshTokenService.createRefreshToken(verified.userId());
 
         return new TokenRefreshResponse(token, rotated.token());
     }
 
-    public MessageResponse signup(SignupRequest request) {
+    public MessageResponse signup(SignupRequest request, String clientIp) {
         AuthUserCreator creator = creatorProvider.getIfAvailable();
         if (creator == null) {
             throw new SignupNotSupportedException(
                     "Signup non configure : declarez un bean AuthUserCreator pour activer POST /api/auth/signup.");
         }
 
-        String key = "signup:" + rateLimitKey(request.getEmail());
-        rateLimiter.check(key);
+        String emailKey = "signup:email:" + rateLimitKey(request.getEmail());
+        String ipKey = "signup:ip:" + clientIp;
+        rateLimiter.check(emailKey);
+        rateLimiter.checkIp(ipKey);
 
         if (provider().findByEmail(request.getEmail()).isPresent()) {
-            rateLimiter.recordFailure(key);
+            // Hash factice : coût identique au chemin nominal (409 indistinguable par timing).
+            passwordEncoder.encode(request.getPassword());
             throw new EmailAlreadyUsedException("Email already in use: " + request.getEmail());
         }
 
         creator.create(request.getEmail(), passwordEncoder.encode(request.getPassword()));
-        rateLimiter.reset(key);
+        rateLimiter.reset(emailKey);
+        rateLimiter.reset(ipKey);
         return new MessageResponse("User registered successfully!");
     }
 

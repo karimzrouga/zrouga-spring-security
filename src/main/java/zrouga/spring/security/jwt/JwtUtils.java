@@ -2,9 +2,7 @@ package zrouga.spring.security.jwt;
 
 import java.util.Base64;
 import java.util.Date;
-import java.util.List;
 
-import zrouga.spring.security.AuthUser;
 import zrouga.spring.security.UserDetailsImpl;
 import zrouga.spring.security.ZrougaSecurityProperties;
 
@@ -54,14 +52,21 @@ public class JwtUtils {
         this.parser = Jwts.parser().verifyWith(this.secretKey).build();
     }
 
-    public String generateJwtToken(UserDetailsImpl userPrincipal, AuthUser user) {
-        List<String> roles = user.getRoles();
+    /**
+     * Génère un JWT signé HS512 depuis le principal (les rôles et le statut sont portés
+     * par {@link UserDetailsImpl}).
+     *
+     * @param userPrincipal le principal authentifié
+     * @return le jeton compact
+     */
+    public String generateJwtToken(UserDetailsImpl userPrincipal) {
         return Jwts.builder()
                 .setSubject(userPrincipal.getUsername())
+                .setIssuedAt(new Date())
                 .claim("id", userPrincipal.getId())
                 .claim("email", userPrincipal.getEmail())
-                .claim("roles", roles)
-                .claim("status", user.getStatus())
+                .claim("roles", userPrincipal.getRoles())
+                .claim("status", userPrincipal.getStatus())
                 .setExpiration(new Date(System.currentTimeMillis() + properties.getJwtExpirationMs()))
                 .signWith(secretKey, Jwts.SIG.HS512)
                 .compact();

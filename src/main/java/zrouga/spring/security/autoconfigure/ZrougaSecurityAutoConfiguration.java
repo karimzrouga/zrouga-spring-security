@@ -136,8 +136,9 @@ public class ZrougaSecurityAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(AuthResource.class)
-    public AuthResource authResource(AuthService authService, PasswordResetService passwordResetService) {
-        return new AuthResource(authService, passwordResetService);
+    public AuthResource authResource(AuthService authService, PasswordResetService passwordResetService,
+            ZrougaSecurityProperties properties) {
+        return new AuthResource(authService, passwordResetService, properties);
     }
 
     @Bean

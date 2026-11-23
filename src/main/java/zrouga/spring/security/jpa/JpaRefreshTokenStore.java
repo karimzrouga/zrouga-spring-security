@@ -7,11 +7,17 @@ import java.util.UUID;
 
 import zrouga.spring.security.RefreshTokenStore;
 import zrouga.spring.security.StoredRefreshToken;
+import zrouga.spring.security.TokenHashing;
 
 import jakarta.persistence.EntityManager;
 
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Stockage JPA : seules les empreintes SHA-256 des jetons sont persistées.
+ * L'empreinte n'est jamais renvoyée — {@code findByToken}/{@code revoke} reconstruisent
+ * le record avec le jeton brut fourni en entrée.
+ */
 public class JpaRefreshTokenStore implements RefreshTokenStore {
 
     private final EntityManager entityManager;
@@ -23,33 +29,45 @@ public class JpaRefreshTokenStore implements RefreshTokenStore {
     @Override
     @Transactional
     public StoredRefreshToken save(long userId, Instant expiryDate) {
+        String raw = UUID.randomUUID().toString();
         RefreshTokenEntity entity = new RefreshTokenEntity();
         entity.setUserId(userId);
-        entity.setToken(UUID.randomUUID().toString());
+        entity.setToken(TokenHashing.sha256Hex(raw));
         entity.setExpiryDate(expiryDate);
+        entity.setRevoked(false);
         entityManager.persist(entity);
-        return new StoredRefreshToken(entity.getToken(), entity.getUserId(), entity.getExpiryDate());
+        return new StoredRefreshToken(raw, userId, expiryDate, false);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Optional<StoredRefreshToken> findByToken(String token) {
+        if (token == null) {
+            return Optional.empty();
+        }
         List<RefreshTokenEntity> results = entityManager
                 .createQuery("SELECT r FROM refreshtoken r WHERE r.token = :token", RefreshTokenEntity.class)
-                .setParameter("token", token)
+                .setParameter("token", TokenHashing.sha256Hex(token))
                 .setMaxResults(1)
                 .getResultList();
         return results.stream()
                 .findFirst()
-                .map(entity -> new StoredRefreshToken(entity.getToken(), entity.getUserId(), entity.getExpiryDate()));
+                .map(entity -> new StoredRefreshToken(token, entity.getUserId(), entity.getExpiryDate(),
+                        entity.isRevoked()));
     }
 
     @Override
     @Transactional
-    public void deleteByToken(String token) {
-        entityManager.createQuery("DELETE FROM refreshtoken r WHERE r.token = :token")
-                .setParameter("token", token)
+    public boolean revoke(String token) {
+        if (token == null) {
+            return false;
+        }
+        int updated = entityManager
+                .createQuery("UPDATE refreshtoken r SET r.revoked = true "
+                        + "WHERE r.token = :token AND r.revoked = false")
+                .setParameter("token", TokenHashing.sha256Hex(token))
                 .executeUpdate();
+        return updated == 1;
     }
 
     @Override

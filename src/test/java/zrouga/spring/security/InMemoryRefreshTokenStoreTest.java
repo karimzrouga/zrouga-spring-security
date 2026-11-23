@@ -24,12 +24,19 @@ class InMemoryRefreshTokenStoreTest {
     }
 
     @Test
-    void deleteByToken() {
+    void revokeEstAtomiqueEtDetecteLaReutilisation() {
         StoredRefreshToken saved = store.save(7L, Instant.now().plusSeconds(60));
 
-        store.deleteByToken(saved.token());
+        assertThat(store.revoke(saved.token())).isTrue();
+        assertThat(store.findByToken(saved.token())).contains(
+                new StoredRefreshToken(saved.token(), saved.userId(), saved.expiryDate(), true));
+        assertThat(store.revoke(saved.token())).isFalse();
+    }
 
-        assertThat(store.findByToken(saved.token())).isEmpty();
+    @Test
+    void revokeDeTokenInconnu() {
+        assertThat(store.revoke("inconnu")).isFalse();
+        assertThat(store.revoke(null)).isFalse();
     }
 
     @Test

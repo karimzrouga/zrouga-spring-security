@@ -74,7 +74,7 @@ class JwtUtilsTest {
         JwtUtils jwtUtils = new JwtUtils(properties(3_600_000L));
         SimpleUser user = user();
 
-        String token = jwtUtils.generateJwtToken(UserDetailsImpl.build(user), user);
+        String token = jwtUtils.generateJwtToken(UserDetailsImpl.build(user));
 
         assertThat(token).isNotBlank();
         assertThat(jwtUtils.validateJwtToken(token)).isTrue();
@@ -87,6 +87,8 @@ class JwtUtilsTest {
         assertThat(claims.get("email")).isEqualTo("admin@test.com");
         assertThat((List<Object>) claims.get("roles")).containsExactly("ADMIN", "AQP");
         assertThat(claims.get("status")).isEqualTo(Boolean.TRUE);
+        assertThat(claims.getIssuedAt()).isNotNull();
+        assertThat(claims.getIssuedAt()).isBeforeOrEqualTo(new Date());
         assertThat(claims.getExpiration()).isAfter(new Date());
     }
 
@@ -95,7 +97,7 @@ class JwtUtilsTest {
         JwtUtils jwtUtils = new JwtUtils(properties(-5_000L));
         SimpleUser user = user();
 
-        String token = jwtUtils.generateJwtToken(UserDetailsImpl.build(user), user);
+        String token = jwtUtils.generateJwtToken(UserDetailsImpl.build(user));
 
         assertThat(jwtUtils.validateJwtToken(token)).isFalse();
     }
@@ -105,7 +107,7 @@ class JwtUtilsTest {
         JwtUtils jwtUtils = new JwtUtils(properties(3_600_000L));
         SimpleUser user = user();
 
-        String token = jwtUtils.generateJwtToken(UserDetailsImpl.build(user), user) + "x";
+        String token = jwtUtils.generateJwtToken(UserDetailsImpl.build(user)) + "x";
 
         assertThat(jwtUtils.validateJwtToken(token)).isFalse();
     }
@@ -117,7 +119,7 @@ class JwtUtilsTest {
         JwtUtils valideur = new JwtUtils(properties(3_600_000L));
         SimpleUser user = user();
 
-        String token = emetteur.generateJwtToken(UserDetailsImpl.build(user), user);
+        String token = emetteur.generateJwtToken(UserDetailsImpl.build(user));
 
         assertThat(valideur.validateJwtToken(token)).isFalse();
     }

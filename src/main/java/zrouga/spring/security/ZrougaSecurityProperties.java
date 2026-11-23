@@ -60,6 +60,15 @@ public class ZrougaSecurityProperties {
     /** Fenêtre de comptage des tentatives en millisecondes (défaut : 15 minutes). */
     private long rateLimitWindowMs = 900_000L;
 
+    /**
+     * Fait confiance à l'en-tête {@code X-Forwarded-For} pour extraire l'IP réelle du
+     * client (derrière un reverse proxy) — <b>défaut : {@code false}</b>.
+     *
+     * <p>À activer <b>uniquement</b> si un proxy de confiance définit cet en-tête :
+     * sinon un client pourrait falsifier sa clé de limitation IP.</p>
+     */
+    private boolean trustForwardedFor = false;
+
     /** Active la purge périodique des refresh tokens expirés (défaut : désactivé). */
     private boolean cleanupEnabled = false;
 
@@ -139,6 +148,14 @@ public class ZrougaSecurityProperties {
 
     public void setRateLimitWindowMs(long rateLimitWindowMs) {
         this.rateLimitWindowMs = rateLimitWindowMs;
+    }
+
+    public boolean isTrustForwardedFor() {
+        return trustForwardedFor;
+    }
+
+    public void setTrustForwardedFor(boolean trustForwardedFor) {
+        this.trustForwardedFor = trustForwardedFor;
     }
 
     public boolean isCleanupEnabled() {

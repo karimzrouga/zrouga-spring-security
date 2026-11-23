@@ -19,28 +19,33 @@ public class RefreshTokenService {
         return refreshTokenStore.findByToken(token);
     }
 
-    public StoredRefreshToken createRefreshToken(AuthUser user) {
-        return refreshTokenStore.save(user.getId(), Instant.now().plusMillis(refreshTokenDurationMs));
+    public StoredRefreshToken createRefreshToken(long userId) {
+        return refreshTokenStore.save(userId, Instant.now().plusMillis(refreshTokenDurationMs));
     }
 
     public StoredRefreshToken verifyExpiration(StoredRefreshToken token) {
         if (token.expiryDate().compareTo(Instant.now()) < 0) {
-            refreshTokenStore.deleteByToken(token.token());
+            refreshTokenStore.revoke(token.token());
             throw new TokenRefreshException("Refresh token was expired. Please make a new signin request");
         }
         return token;
     }
 
     /**
-     * Révoque un refresh token (utilisé lors de la rotation).
+     * Révoque de façon atomique un refresh token (rotation).
      *
      * @param token la valeur du jeton à révoquer
+     * @return {@code false} s'il était déjà révoqué (réutilisation détectée)
      */
-    public void revoke(String token) {
-        refreshTokenStore.deleteByToken(token);
+    public boolean revoke(String token) {
+        return refreshTokenStore.revoke(token);
     }
 
     public int deleteByUserId(Long userId) {
         return refreshTokenStore.deleteByUserId(userId);
+    }
+
+    public int deleteExpired(Instant now) {
+        return refreshTokenStore.deleteExpired(now);
     }
 }

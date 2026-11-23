@@ -260,7 +260,7 @@ class ZrougaSecurityIntegrationTest {
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.status").value(429))
                 .andExpect(jsonPath("$.error").value("Too Many Requests"))
-                .andExpect(jsonPath("$.message", containsString("Trop de tentatives")));
+                .andExpect(jsonPath("$.message", containsString("Too many attempts")));
     }
 
     @Test

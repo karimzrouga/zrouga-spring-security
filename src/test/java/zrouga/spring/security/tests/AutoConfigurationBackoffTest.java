@@ -111,7 +111,7 @@ class AutoConfigurationBackoffTest {
             request.setEmail("nouveau@test.com");
             request.setPassword("MotDePasse123");
 
-            assertThatThrownBy(() -> context.getBean(AuthService.class).signup(request))
+            assertThatThrownBy(() -> context.getBean(AuthService.class).signup(request, "127.0.0.1"))
                     .isInstanceOf(SignupNotSupportedException.class)
                     .hasMessageContaining("AuthUserCreator");
         });
@@ -123,7 +123,7 @@ class AutoConfigurationBackoffTest {
             ForgotPasswordRequest request = new ForgotPasswordRequest();
             request.setEmail("nouveau@test.com");
 
-            assertThatThrownBy(() -> context.getBean(PasswordResetService.class).forgotPassword(request))
+            assertThatThrownBy(() -> context.getBean(PasswordResetService.class).forgotPassword(request, "127.0.0.1"))
                     .isInstanceOf(PasswordResetNotSupportedException.class)
                     .hasMessageContaining("reset-enabled");
         });
@@ -297,7 +297,7 @@ class AutoConfigurationBackoffTest {
                 }
 
                 @Override
-                public void recordFailure(String key) {
+                public void checkIp(String key) {
                 }
 
                 @Override
@@ -332,8 +332,9 @@ class AutoConfigurationBackoffTest {
         }
 
         @Bean
-        AuthResource customAuthResource(AuthService authService, PasswordResetService passwordResetService) {
-            return new AuthResource(authService, passwordResetService);
+        AuthResource customAuthResource(AuthService authService, PasswordResetService passwordResetService,
+                ZrougaSecurityProperties properties) {
+            return new AuthResource(authService, passwordResetService, properties);
         }
 
         @Bean
