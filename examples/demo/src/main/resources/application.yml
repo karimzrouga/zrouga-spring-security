@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: security-starter-demo
+
+zrouga:
+  security:
+    # Base64 standard >= 64 octets (HS512) - secret de démonstration uniquement
+    jwt-secret: AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/QA==
+    cleanup-enabled: true
+    # Réinitialisation SMTP (désactivée par défaut) :
+    # 1. lancer un SMTP local type Mailpit (localhost:1025)
+    # 2. décommenter les lignes ci-dessous
+    # reset-enabled: true
+    # reset-base-url: http://localhost:5173/reset-password
+    # reset-email-from: demo@example.com
+    # spring.mail.host: localhost
+    # spring.mail.port: 1025

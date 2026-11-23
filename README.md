@@ -2,7 +2,7 @@
 
 Starter Spring Security **générique et autonome** : JWT (HS512), refresh token avec rotation, rate-limiting sur la connexion, abstraction `AuthUser` / `AuthUserProvider`, rôles illimités, inscription, réinitialisation du mot de passe par e-mail SMTP (**optionnelle**). Réutilisable dans n'importe quel projet Spring Boot 4 / Java 21 .
 
-- Coordonnées : `zrouga.spring:security-starter:1.1.0`
+- Coordonnées : `zrouga.spring:security-starter:2.0.0` (voir `CHANGELOG.md` pour les ruptures)
 - Auto-configuré via `AutoConfiguration.imports` : rien à importer, l'ajout de la dépendance suffit.
 - Licence : MIT.
 
@@ -17,10 +17,15 @@ Starter Spring Security **générique et autonome** : JWT (HS512), refresh token
 </repositories>
 
 <dependencies>
+    <!-- spring-boot-starter-web est OPTIONNEL dans le starter : à déclarer ici -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
     <dependency>
         <groupId>zrouga.spring</groupId>
         <artifactId>security-starter</artifactId>
-        <version>1.1.0</version>
+        <version>2.0.0</version>
     </dependency>
 </dependencies>
 ```
@@ -49,6 +54,7 @@ zrouga:
       - /api/auth/**
     rate-limit-max-attempts: 5                       # défaut : 5 échecs puis 429
     rate-limit-window-ms: 900000                     # défaut : fenêtre de 15 min
+    trust-forwarded-for: false                       # défaut : X-Forwarded-For ignoré (true derrière un proxy)
     cleanup-enabled: false                           # défaut : purge des refresh tokens expirés désactivée
     cleanup-fixed-delay-ms: 3600000                  # défaut : purge toutes les 1 h
     reset-enabled: false                             # défaut : réinitialisation SMTP DÉSACTIVÉE
@@ -317,19 +323,24 @@ utilisez `@PreAuthorize("hasRole('ADMIN')")` (et non `hasAuthority('ADMIN')`) �
 
 ## 10. Refresh token
 
-- **Rotation** : chaque `/refreshtoken` révoque l'ancien jeton et en émet un nouveau. Toute réutilisation d'un jeton déjà tourné répond 403 (détection de vol).
+- **Hash en base** : la base ne stocke que le **hash SHA-256** du jeton (`TokenHashing`) — un vol de base ne donne aucun jeton utilisable.
+- **Rotation** : chaque `/refreshtoken` révoque l'ancien jeton et en émet un nouveau (opération CAS atomique, sûre en concurrence).
+- **Réutilisation = vol détecté** : présenter un jeton déjà tourné révoque **toute la famille** de l'utilisateur et répond 403 (`refresh_token_rejected`).
 - **Connexion** : un nouvel `signin` révoque tous les refresh tokens précédents de l'utilisateur (politique mono-session).
-- **Projet avec JPA** (`spring-boot-starter-data-jpa` présent) : table `refreshtoken` créée automatiquement (`user_id`, `token` unique, `expiryDate`), store `JpaRefreshTokenStore`.
+- **Projet avec JPA** (`spring-boot-starter-data-jpa` présent) : table `refreshtoken` créée automatiquement (`user_id`, `token` (hash unique), `expiry_date`, `revoked`, index), store `JpaRefreshTokenStore`.
 - **Sans JPA** : store en mémoire (`InMemoryRefreshTokenStore`).
-- **Purge des expirés** : optionnelle — `zrouga.security.cleanup-enabled=true` active une purge périodique (`cleanup-fixed-delay-ms`).
+- **Purge des expirés** : optionnelle — `zrouga.security.cleanup-enabled=true` active une purge périodique (`cleanup-fixed-delay-ms`), également des jetons de réinitialisation (§6).
 - Personnalisable : déclarez votre propre bean `RefreshTokenStore` — les auto-configs reculent.
 
 ## 11. Rate-limiting (anti-bruteforce)
 
 5 tentatives échouées par e-mail puis 15 minutes de blocage (429), par défaut — réglable via
 `rate-limit-max-attempts` / `rate-limit-window-ms`. Une connexion réussie remet le compteur à zéro.
-Le même compteur protège l'inscription (clé `signup:<email>`).
-Personnalisable : déclarez votre propre bean `LoginRateLimiter` (base de données, Redis, …).
+
+- **Clés** : `signin|signup|forgot:email:<email>` et `signin|signup|forgot:ip:<ip>` — le quota IP est **×10** le quota e-mail.
+- **Vérification atomique** : la tentative est **réservée** avant l'authentification (une échec consomme le quota) ; `429` porte le code `rate_limit_exceeded`.
+- **Derrière un proxy** : `zrouga.security.trust-forwarded-for: true` fait lire `X-Forwarded-For` (défaut `false` : IP réelle).
+- Personnalisable : déclarez votre propre bean `LoginRateLimiter` (base de données, Redis, …).
 
 ## 12. Personnalisation
 
@@ -356,6 +367,8 @@ Tous les beans suivants sont surchargeables — déclarez le vôtre et celui du 
 - `AuthUserCreator` : SPI fournie par le projet hôte (voir §5) — sans elle, `/signup` répond 501.
 - CORS : à définir côté projet hôte (aucune origine codée en dur côté starter).
 - `@CrossOrigin` supprimé : configurez le CORS via votre `CorsConfigurationSource` / `WebMvcConfigurer`.
+- **Image native GraalVM** : hints fournis (`ZrougaRuntimeHints` + `META-INF/spring/aot.factories`) pour les DTO réfléchis.
+- **Erreurs** : `AuthException` + sous-exceptions portent un `code()` machine ; `TokenControllerAdvice` ne traite que les exceptions du starter (déclarez le vôtre pour vos contrôleurs).
 
 ## 13. Build / publication (mainteneur)
 
@@ -366,7 +379,9 @@ $env:GITHUB_TOKEN = gh auth token   # scope write:packages
 ```
 
 - **CI GitHub Actions** (`.github/workflows/ci.yml`) : `mvnw verify` à chaque push/PR ; publication automatique sur tag `v*`.
-- **Couverture** : rapport JaCoCo dans `target/site/jacoco/`.
+- **Release** : merge sur `main`, tag `v2.0.0` → la CI publie la version.
+- **Exemple d'application** : `examples/demo/` (comptes mémoire, `/api/me` protégé) — le starter doit être `mvnw installé` localement avant de le builder.
+- **Couverture** : rapport JaCoCo dans `target/site/jacoco/` (seuil verrouillé : ≥ 80 % instructions, ≥ 55 % branches).
 - **Métadonnées IDE** : autocomplétion et descriptions des propriétés `zrouga.security.*` (configuration-processor).
 
 Repository source : https://github.com/karimzrouga/zrouga-spring-security
