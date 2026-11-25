@@ -1,6 +1,6 @@
 # security-starter-demo-jwt
 
-Application Spring Boot minimale utilisant `zrouga.spring:security-starter:2.0.0`
+Application Spring Boot minimale utilisant `zrouga.spring:security-starter:2.1.0`
 en **mode `header`** (défaut) : Stateless JWT — access token transmis en
 `Authorization: Bearer`, refresh token dans le corps JSON de `/refreshtoken`.
 Comptes en mémoire, inscription, connexion, rotation de refresh token et un
@@ -13,7 +13,7 @@ endpoint protégé `/api/me`.
 
 - Java 21
 - Le starter installé localement : depuis la racine du repo, `.\mvnw.cmd install`
-  (sinon la dépendance `2.0.0` est résolue depuis GitHub Packages)
+  (sinon la dépendance `2.1.0` est résolue depuis GitHub Packages)
 
 ## Lancer
 

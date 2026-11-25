@@ -3,7 +3,7 @@
 Toutes les versions notables de `zrouga.spring:security-starter`.
 Les versions antérieures à 2.0.0 sont décrites dans les releases GitHub.
 
-## [2.1.0] - unreleased
+## [2.1.0] - 2026-11-25
 
 Fonctionnalités optionnelles, toutes **désactivées par défaut** : le
 comportement 2.0.0 est inchangé tant qu'elles ne sont pas activées.

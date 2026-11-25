@@ -10,7 +10,7 @@
     </parent>
     <groupId>zrouga.spring</groupId>
     <artifactId>security-starter</artifactId>
-    <version>2.0.0</version>
+    <version>2.1.0</version>
     <name>zrouga-spring-security-starter</name>
     <description>Starter Spring Security personnalisé : JWT, refresh token, AuthUser/AuthUserProvider</description>
     <url>https://github.com/karimzrouga/zrouga-spring-security</url>

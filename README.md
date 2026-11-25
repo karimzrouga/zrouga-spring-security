@@ -2,7 +2,7 @@
 
 Starter Spring Security **générique et autonome** : JWT (HS512), refresh token avec rotation, rate-limiting sur la connexion, verrouillage de compte et politique de mot de passe (**optionnels**), abstraction `AuthUser` / `AuthUserProvider`, rôles illimités, inscription, réinitialisation du mot de passe par e-mail SMTP (**optionnelle**). Réutilisable dans n'importe quel projet Spring Boot 4 / Java 21 .
 
-- Coordonnées : `zrouga.spring:security-starter:2.0.0` (voir `CHANGELOG.md` pour les ruptures)
+- Coordonnées : `zrouga.spring:security-starter:2.1.0` (voir `CHANGELOG.md` pour les ruptures)
 - Auto-configuré via `AutoConfiguration.imports` : rien à importer, l'ajout de la dépendance suffit.
 - Licence : MIT.
 
@@ -25,7 +25,7 @@ Starter Spring Security **générique et autonome** : JWT (HS512), refresh token
     <dependency>
         <groupId>zrouga.spring</groupId>
         <artifactId>security-starter</artifactId>
-        <version>2.0.0</version>
+        <version>2.1.0</version>
     </dependency>
 </dependencies>
 ```
@@ -480,7 +480,7 @@ $env:GITHUB_TOKEN = gh auth token   # scope write:packages
 ```
 
 - **CI GitHub Actions** (`.github/workflows/ci.yml`) : `mvnw verify` à chaque push/PR ; publication automatique sur tag `v*`.
-- **Release** : merge sur `main`, tag `v2.0.0` → la CI publie la version.
+- **Release** : merge sur `main`, tag `v2.1.0` → la CI publie la version.
 - **Exemple d'application** : `examples/demo-jwt/` (Stateless JWT en header) et `examples/demo-cookie/` (Stateful Session Cookies) — le starter doit être `mvnw installé` localement avant de les builder.
 - **Couverture** : rapport JaCoCo dans `target/site/jacoco/` (seuil verrouillé : ≥ 80 % instructions, ≥ 55 % branches).
 - **Métadonnées IDE** : autocomplétion et descriptions des propriétés `zrouga.security.*` (configuration-processor).

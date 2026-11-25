@@ -1,6 +1,6 @@
 # security-starter-demo-cookie
 
-Application Spring Boot minimale utilisant `zrouga.spring:security-starter:2.0.0`
+Application Spring Boot minimale utilisant `zrouga.spring:security-starter:2.1.0`
 en **mode `cookie`** (Stateful Session Cookies) : le access token est posé en
 cookie `zrouga_access` (`HttpOnly`, `Path=/`) et le refresh token en cookie
 `zrouga_refresh` (`HttpOnly`, `Path=/api/auth`) — le front n'a jamais à manipuler
@@ -14,7 +14,7 @@ et un endpoint protégé `/api/me`.
 
 - Java 21
 - Le starter installé localement : depuis la racine du repo, `.\mvnw.cmd install`
-  (sinon la dépendance `2.0.0` est résolue depuis GitHub Packages)
+  (sinon la dépendance `2.1.0` est résolue depuis GitHub Packages)
 
 ## Lancer
 
