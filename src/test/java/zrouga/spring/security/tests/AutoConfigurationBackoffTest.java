@@ -81,8 +81,15 @@ class AutoConfigurationBackoffTest {
             assertThat(context).hasSingleBean(PasswordEncoder.class);
             assertThat(context).hasSingleBean(LoginRateLimiter.class);
             assertThat(context).hasSingleBean(RefreshTokenService.class);
+            assertThat(context).hasSingleBean(zrouga.spring.security.AccountLockoutService.class);
+            assertThat(context).hasSingleBean(zrouga.spring.security.PasswordPolicy.class);
+            assertThat(context).hasSingleBean(zrouga.spring.security.PasswordHistoryStore.class);
             assertThat(context.getBean(PasswordEncoder.class)).isInstanceOf(BCryptPasswordEncoder.class);
             assertThat(context.getBean(LoginRateLimiter.class)).isInstanceOf(InMemoryLoginRateLimiter.class);
+            assertThat(context.getBean(zrouga.spring.security.AccountLockoutService.class))
+                    .isInstanceOf(zrouga.spring.security.InMemoryAccountLockoutService.class);
+            assertThat(context.getBean(zrouga.spring.security.PasswordHistoryStore.class))
+                    .isInstanceOf(zrouga.spring.security.InMemoryPasswordHistoryStore.class);
         });
     }
 
@@ -177,6 +184,10 @@ class AutoConfigurationBackoffTest {
             assertThat(context.getBean(RefreshTokenService.class))
                     .isSameAs(context.getBean("customRefreshTokenService"));
             assertThat(context.getBean(AuthService.class)).isSameAs(context.getBean("customAuthService"));
+            assertThat(context.getBean(zrouga.spring.security.AccountLockoutService.class))
+                    .isSameAs(context.getBean("customAccountLockoutService"));
+            assertThat(context.getBean(zrouga.spring.security.PasswordPolicy.class))
+                    .isSameAs(context.getBean("customPasswordPolicy"));
             assertThat(context.getBean(AuthResource.class)).isSameAs(context.getBean("customAuthResource"));
             assertThat(context.getBean(AuthEntryPointJwt.class))
                     .isSameAs(context.getBean("customAuthEntryPointJwt"));
@@ -321,9 +332,22 @@ class AutoConfigurationBackoffTest {
                 RefreshTokenService refreshTokenService,
                 LoginRateLimiter loginRateLimiter,
                 PasswordEncoder passwordEncoder,
-                org.springframework.beans.factory.ObjectProvider<zrouga.spring.security.AuthUserCreator> creatorProvider) {
+                org.springframework.beans.factory.ObjectProvider<zrouga.spring.security.AuthUserCreator> creatorProvider,
+                zrouga.spring.security.AccountLockoutService accountLockoutService,
+                zrouga.spring.security.PasswordPolicy passwordPolicy) {
             return new AuthService(authenticationManager, userProvider, jwtUtils, refreshTokenService,
-                    loginRateLimiter, passwordEncoder, creatorProvider);
+                    loginRateLimiter, passwordEncoder, creatorProvider, accountLockoutService, passwordPolicy);
+        }
+
+        @Bean
+        zrouga.spring.security.AccountLockoutService customAccountLockoutService(
+                ZrougaSecurityProperties properties) {
+            return new zrouga.spring.security.InMemoryAccountLockoutService(properties);
+        }
+
+        @Bean
+        zrouga.spring.security.PasswordPolicy customPasswordPolicy(ZrougaSecurityProperties properties) {
+            return new zrouga.spring.security.PasswordPolicy(properties);
         }
 
         @Bean

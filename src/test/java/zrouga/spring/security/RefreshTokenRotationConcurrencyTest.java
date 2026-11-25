@@ -116,7 +116,9 @@ class RefreshTokenRotationConcurrencyTest {
                 new RefreshTokenService(store, properties),
                 new InMemoryLoginRateLimiter(properties),
                 null,
-                mock(org.springframework.beans.factory.ObjectProvider.class));
+                mock(org.springframework.beans.factory.ObjectProvider.class),
+                new InMemoryAccountLockoutService(properties),
+                new PasswordPolicy(properties));
     }
 
     @Test

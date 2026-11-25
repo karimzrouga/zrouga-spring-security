@@ -1,11 +1,16 @@
 package zrouga.spring.security.autoconfigure;
 
+import zrouga.spring.security.AccountLockoutService;
 import zrouga.spring.security.AuthResource;
 import zrouga.spring.security.AuthService;
 import zrouga.spring.security.AuthUserCreator;
 import zrouga.spring.security.AuthUserPasswordUpdater;
 import zrouga.spring.security.AuthUserProvider;
+import zrouga.spring.security.InMemoryAccountLockoutService;
+import zrouga.spring.security.InMemoryPasswordHistoryStore;
 import zrouga.spring.security.InMemoryPasswordResetTokenStore;
+import zrouga.spring.security.PasswordHistoryStore;
+import zrouga.spring.security.PasswordPolicy;
 import zrouga.spring.security.PasswordResetEmailSender;
 import zrouga.spring.security.PasswordResetService;
 import zrouga.spring.security.PasswordResetTokenStore;
@@ -123,6 +128,24 @@ public class ZrougaSecurityAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(AccountLockoutService.class)
+    public AccountLockoutService accountLockoutService(ZrougaSecurityProperties properties) {
+        return new InMemoryAccountLockoutService(properties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(PasswordPolicy.class)
+    public PasswordPolicy passwordPolicy(ZrougaSecurityProperties properties) {
+        return new PasswordPolicy(properties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(PasswordHistoryStore.class)
+    public PasswordHistoryStore passwordHistoryStore() {
+        return new InMemoryPasswordHistoryStore();
+    }
+
+    @Bean
     @ConditionalOnMissingBean(AuthService.class)
     public AuthService authService(
             AuthenticationManager authenticationManager,
@@ -131,9 +154,11 @@ public class ZrougaSecurityAutoConfiguration {
             RefreshTokenService refreshTokenService,
             LoginRateLimiter loginRateLimiter,
             PasswordEncoder passwordEncoder,
-            ObjectProvider<AuthUserCreator> creatorProvider) {
+            ObjectProvider<AuthUserCreator> creatorProvider,
+            AccountLockoutService accountLockoutService,
+            PasswordPolicy passwordPolicy) {
         return new AuthService(authenticationManager, userProvider, jwtUtils, refreshTokenService,
-                loginRateLimiter, passwordEncoder, creatorProvider);
+                loginRateLimiter, passwordEncoder, creatorProvider, accountLockoutService, passwordPolicy);
     }
 
     @Bean
@@ -169,9 +194,12 @@ public class ZrougaSecurityAutoConfiguration {
             PasswordResetTokenStore passwordResetTokenStore,
             RefreshTokenService refreshTokenService,
             LoginRateLimiter loginRateLimiter,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            PasswordPolicy passwordPolicy,
+            PasswordHistoryStore passwordHistoryStore) {
         return new PasswordResetService(properties, userProvider, passwordUpdater, emailSender,
-                passwordResetTokenStore, refreshTokenService, loginRateLimiter, passwordEncoder);
+                passwordResetTokenStore, refreshTokenService, loginRateLimiter, passwordEncoder,
+                passwordPolicy, passwordHistoryStore);
     }
 
     @Bean

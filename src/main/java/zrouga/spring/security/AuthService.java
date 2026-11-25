@@ -18,6 +18,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -34,6 +35,8 @@ public class AuthService {
     private final LoginRateLimiter rateLimiter;
     private final PasswordEncoder passwordEncoder;
     private final ObjectProvider<AuthUserCreator> creatorProvider;
+    private final AccountLockoutService accountLockout;
+    private final PasswordPolicy passwordPolicy;
 
     public AuthService(
             AuthenticationManager authenticationManager,
@@ -42,7 +45,9 @@ public class AuthService {
             RefreshTokenService refreshTokenService,
             LoginRateLimiter rateLimiter,
             PasswordEncoder passwordEncoder,
-            ObjectProvider<AuthUserCreator> creatorProvider) {
+            ObjectProvider<AuthUserCreator> creatorProvider,
+            AccountLockoutService accountLockout,
+            PasswordPolicy passwordPolicy) {
         this.authenticationManager = authenticationManager;
         this.userProvider = userProvider;
         this.jwtUtils = jwtUtils;
@@ -50,6 +55,8 @@ public class AuthService {
         this.rateLimiter = rateLimiter;
         this.passwordEncoder = passwordEncoder;
         this.creatorProvider = creatorProvider;
+        this.accountLockout = accountLockout;
+        this.passwordPolicy = passwordPolicy;
     }
 
     public JwtResponse authenticateUser(LoginRequest loginRequest, String clientIp) {
@@ -57,10 +64,20 @@ public class AuthService {
         String ipKey = "signin:ip:" + clientIp;
         rateLimiter.check(emailKey);
         rateLimiter.checkIp(ipKey);
+        accountLockout.check(loginRequest.getEmail());
 
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword()));
+        Authentication authentication;
+        try {
+            authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword()));
+        } catch (AuthenticationException ex) {
+            // Échec (identifiants, compte inconnu ou inactif) : compteur verrouillage —
+            // recordFailure lève AccountLockedException (423) dès le seuil atteint.
+            accountLockout.recordFailure(loginRequest.getEmail());
+            throw ex;
+        }
 
+        accountLockout.reset(loginRequest.getEmail());
         rateLimiter.reset(emailKey);
         rateLimiter.reset(ipKey);
 
@@ -118,6 +135,11 @@ public class AuthService {
             throw new SignupNotSupportedException(
                     "Signup is not configured: declare an AuthUserCreator bean to enable POST /api/auth/signup.");
         }
+
+        // Politique de mot de passe avant toute autre vérification : un mot de passe
+        // faible est refusé (400 weak_password) quel que soit l'e-mail — uniforme,
+        // aucune fuite sur l'existence du compte.
+        passwordPolicy.validate(request.getPassword());
 
         String emailKey = "signup:email:" + AuthSupport.rateLimitKey(request.getEmail());
         String ipKey = "signup:ip:" + clientIp;

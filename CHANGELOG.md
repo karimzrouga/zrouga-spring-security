@@ -3,6 +3,41 @@
 Toutes les versions notables de `zrouga.spring:security-starter`.
 Les versions antérieures à 2.0.0 sont décrites dans les releases GitHub.
 
+## [2.1.0] - unreleased
+
+Fonctionnalités optionnelles, toutes **désactivées par défaut** : le
+comportement 2.0.0 est inchangé tant qu'elles ne sont pas activées.
+
+### Added
+
+- **Verrouillage de compte** (`zrouga.security.lockout-enabled`, défaut
+  `false`) : après `lockout-max-attempts` connexions échouées (défaut 5), le
+  compte répond `423 account_locked` pendant `lockout-duration-ms` (défaut
+  15 min), y compris avec le bon mot de passe. Une connexion réussie ou
+  l'expiration du verrou remettent le compteur à zéro ; un compte inconnu se
+  verrouille uniformément (pas d'énumération). Complémentaire du rate-limit
+  (rate-limit = par e-mail/IP, verrouillage = par compte) ; les tentatives sur
+  un compte verrouillé restent soumises au rate-limit. SPI
+  `AccountLockoutService` (défaut `InMemoryAccountLockoutService`, plafonné à
+  10 000 comptes suivis avec purge des entrées expirées).
+- **Politique de mot de passe** (`password-policy-enabled`, défaut `false`) :
+  longueur minimale (`password-min-length`) et complexité
+  (`password-require-uppercase|lowercase|digit|special`, défauts `true`) sur
+  `/signup` et `/reset-password` → `400 weak_password` listant **toutes** les
+  règles manquantes. Sur `/reset-password`, la validation précède la
+  consommation du jeton : un refus laisse le jeton utilisable pour une nouvelle
+  tentative.
+- **Anti-réutilisation du mot de passe** (`password-history-count`, défaut 3,
+  `0` = désactivé) : à la réinitialisation, refus du mot de passe courant et des
+  précédents (`400 weak_password`) — vérification par rejouage de
+  `PasswordEncoder.matches` sur les hash conservés par `PasswordHistoryStore`
+  (défaut `InMemoryPasswordHistoryStore` ; déclarez le vôtre pour persister,
+  l'historique mémoire étant perdu au redémarrage).
+- **Nouvelles exceptions machine** : `account_locked` (HTTP 423),
+  `weak_password` (HTTP 400) — ajoutées au `TokenControllerAdvice`.
+- **Beans surchargeables** : `AccountLockoutService`, `PasswordPolicy`,
+  `PasswordHistoryStore` (autoconfiguration recule si vous déclarez le vôtre).
+
 ## [2.0.0] - 2026-11-23
 
 Version de rupture : renforcement de la sécurité des tokens, contrat d'erreur

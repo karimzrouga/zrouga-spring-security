@@ -7,6 +7,7 @@ import java.util.Optional;
 
 import zrouga.spring.security.exception.InvalidResetTokenException;
 import zrouga.spring.security.exception.PasswordResetNotSupportedException;
+import zrouga.spring.security.exception.WeakPasswordException;
 import zrouga.spring.security.payload.ForgotPasswordRequest;
 import zrouga.spring.security.payload.MessageResponse;
 import zrouga.spring.security.payload.ResetPasswordRequest;
@@ -22,7 +23,14 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  * <p>Flux : {@code /forgot-password} génère un jeton usage unique (15 min par défaut),
  * l'e-mail SMTP contient le lien {@code reset-base-url?token=…} ; {@code /reset-password}
  * consomme le jeton <b>avant</b> toute mutation (claim first), enregistre le nouveau hash
- * via {@link AuthUserPasswordUpdater} et révoque tous les refresh tokens du compte.</p>
+ * via {@code AuthUserPasswordUpdater} et révoque tous les refresh tokens du compte.</p>
+ *
+ * <p>Politique de mot de passe (optionnelle, {@code password-policy-enabled=true}) :
+ * le nouveau mot de passe est validé <b>avant</b> la consommation du jeton — un mot de
+ * passe refusé ({@code 400 weak_password}) laisse le jeton utilisable pour une nouvelle
+ * tentative. Vérifie aussi l'anti-réutilisation : mot de passe courant (hash de
+ * {@link AuthUser#getPassword()}) et {@code password-history-count} précédents via
+ * {@link PasswordHistoryStore}.</p>
  *
  * <p>Anti-énumération : {@code /forgot-password} répond toujours le même message,
  * que l'e-mail existe ou non.</p>
@@ -39,6 +47,8 @@ public class PasswordResetService {
     private final RefreshTokenService refreshTokenService;
     private final LoginRateLimiter rateLimiter;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordPolicy passwordPolicy;
+    private final PasswordHistoryStore passwordHistoryStore;
 
     public PasswordResetService(
             ZrougaSecurityProperties properties,
@@ -48,7 +58,9 @@ public class PasswordResetService {
             PasswordResetTokenStore tokenStore,
             RefreshTokenService refreshTokenService,
             LoginRateLimiter rateLimiter,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            PasswordPolicy passwordPolicy,
+            PasswordHistoryStore passwordHistoryStore) {
         this.properties = properties;
         this.userProvider = userProvider;
         this.passwordUpdater = passwordUpdater;
@@ -57,6 +69,8 @@ public class PasswordResetService {
         this.refreshTokenService = refreshTokenService;
         this.rateLimiter = rateLimiter;
         this.passwordEncoder = passwordEncoder;
+        this.passwordPolicy = passwordPolicy;
+        this.passwordHistoryStore = passwordHistoryStore;
         validateWhenEnabled();
     }
 
@@ -110,15 +124,45 @@ public class PasswordResetService {
         AuthUser user = provider().findByEmail(stored.email())
                 .orElseThrow(() -> invalidToken());
 
+        // Politique avant consommation : un mot de passe refusé ne brûle pas le jeton.
+        if (properties.isPasswordPolicyEnabled()) {
+            passwordPolicy.validate(request.getPassword());
+            requireNotReused(stored.email(), request.getPassword(), user.getPassword());
+        }
+
         // Claim first : un seul concurrent peut consommer le jeton.
         if (!tokenStore.consume(rawToken)) {
             throw invalidToken();
         }
 
+        String outgoingHash = user.getPassword();
         updater().updatePassword(stored.email(), passwordEncoder.encode(request.getPassword()));
+        if (properties.isPasswordPolicyEnabled()) {
+            passwordHistoryStore.record(stored.email(), outgoingHash, properties.getPasswordHistoryCount());
+        }
         refreshTokenService.deleteByUserId(user.getId());
 
         return new MessageResponse("Password has been reset successfully.");
+    }
+
+    /**
+     * Anti-réutilisation : refuse si le mot de passe brut correspond au hash courant
+     * du compte ou à l'un des {@code password-history-count} précédents (bcrypt ne permet
+     * pas de comparer hash à hash — on rejoue {@link PasswordEncoder#matches} sur chacun).
+     *
+     * @throws WeakPasswordException si le mot de passe figure dans l'historique
+     */
+    private void requireNotReused(String email, String rawPassword, String currentHash) {
+        if (passwordEncoder.matches(rawPassword, currentHash)) {
+            throw new WeakPasswordException(
+                    "Password was recently used: choose a password you have not used before.");
+        }
+        for (String previousHash : passwordHistoryStore.find(email)) {
+            if (passwordEncoder.matches(rawPassword, previousHash)) {
+                throw new WeakPasswordException(
+                        "Password was recently used: choose a password you have not used before.");
+            }
+        }
     }
 
     private void validateWhenEnabled() {

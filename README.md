@@ -1,6 +1,6 @@
 # zrouga-spring-security-starter
 
-Starter Spring Security **générique et autonome** : JWT (HS512), refresh token avec rotation, rate-limiting sur la connexion, abstraction `AuthUser` / `AuthUserProvider`, rôles illimités, inscription, réinitialisation du mot de passe par e-mail SMTP (**optionnelle**). Réutilisable dans n'importe quel projet Spring Boot 4 / Java 21 .
+Starter Spring Security **générique et autonome** : JWT (HS512), refresh token avec rotation, rate-limiting sur la connexion, verrouillage de compte et politique de mot de passe (**optionnels**), abstraction `AuthUser` / `AuthUserProvider`, rôles illimités, inscription, réinitialisation du mot de passe par e-mail SMTP (**optionnelle**). Réutilisable dans n'importe quel projet Spring Boot 4 / Java 21 .
 
 - Coordonnées : `zrouga.spring:security-starter:2.0.0` (voir `CHANGELOG.md` pour les ruptures)
 - Auto-configuré via `AutoConfiguration.imports` : rien à importer, l'ajout de la dépendance suffit.
@@ -54,6 +54,16 @@ zrouga:
       - /api/auth/**
     rate-limit-max-attempts: 5                       # défaut : 5 échecs puis 429
     rate-limit-window-ms: 900000                     # défaut : fenêtre de 15 min
+    lockout-enabled: false                           # défaut : verrouillage de compte DÉSACTIVÉ
+    lockout-max-attempts: 5                          # défaut : 5 échecs puis 423
+    lockout-duration-ms: 900000                      # défaut : verrou de 15 min
+    password-policy-enabled: false                   # défaut : politique de mot de passe DÉSACTIVÉE
+    password-min-length: 8                           # défaut : longueur minimale
+    password-require-uppercase: true                 # défaut : majuscule exigée
+    password-require-lowercase: true                 # défaut : minuscule exigée
+    password-require-digit: true                     # défaut : chiffre exigé
+    password-require-special: true                   # défaut : caractère spécial exigé
+    password-history-count: 3                        # défaut : 3 anciens mots de passe refusés
     trust-forwarded-for: false                       # défaut : X-Forwarded-For ignoré (true derrière un proxy)
     cleanup-enabled: false                           # défaut : purge des refresh tokens expirés désactivée
     cleanup-fixed-delay-ms: 3600000                  # défaut : purge toutes les 1 h
@@ -114,7 +124,7 @@ Pour activer l'inscription (`/api/auth/signup`), déclarez en plus un bean `Auth
 
 ### Erreurs — format unifié
 
-Toutes les erreurs du starter (400, 401, 403, 409, 429, 501) ont la forme :
+Toutes les erreurs du starter (400, 401, 403, 409, 423, 429, 501) ont la forme :
 
 ```json
 { "status": 403, "error": "Forbidden", "message": "...", "path": "/api/auth/refreshtoken", "timestamp": "2026-11-22T12:00:00Z" }
@@ -127,6 +137,8 @@ Toutes les erreurs du starter (400, 401, 403, 409, 429, 501) ont la forme :
 | E-mail déjà utilisé lors d'une inscription | 409 |
 | Jeton de réinitialisation invalide, expiré ou déjà utilisé | 400 |
 | Trop de tentatives de connexion (`rate-limit-max-attempts`) | 429 |
+| Compte verrouillé après N échecs (`lockout-max-attempts`) — code `account_locked` | 423 |
+| Mot de passe refusé par la politique (`password-policy-enabled`) — code `weak_password` | 400 |
 | Corps de requête invalide (validation `@Valid`) | 400 |
 | Inscription sans bean `AuthUserCreator` déclaré | 501 |
 | Réinitialisation désactivée (`reset-enabled=false`) | 501 |
@@ -139,6 +151,7 @@ Tout le reste de l'API est `authenticated()` sauf `public-paths`.
 
 Corps : `{"email": "...", "password": "..."}` — mot de passe de **8 à 128 caractères**, e-mail valide.
 Réponse `201` : `{"message": "User registered successfully!"}` puis connectez-vous via `/signin`.
+Avec `password-policy-enabled=true`, le mot de passe doit en plus satisfaire la politique (§12) → `400 weak_password`.
 
 L'inscription est **publique** (couverte par `public-paths` = `/api/auth/**`). Pour l'activer, déclarez un bean `AuthUserCreator` — c'est votre projet qui crée réellement l'utilisateur :
 
@@ -170,6 +183,7 @@ public class MonAuthUserCreator implements AuthUserCreator {
 | E-mail déjà utilisé | 409 |
 | Aucun bean `AuthUserCreator` déclaré | 501 (message : « declarez un bean AuthUserCreator… ») |
 | Corps invalide (e-mail, mot de passe < 8 caractères) | 400 |
+| Mot de passe refusé par la politique (§12) — `weak_password` | 400 |
 | Trop d'inscriptions ratées pour le même e-mail (rate-limit) | 429 |
 
 ## 6. Réinitialisation du mot de passe (optionnelle — SMTP)
@@ -222,6 +236,8 @@ public class MonPasswordUpdater implements AuthUserPasswordUpdater {
 
 - **Rate-limit** : 5 demandes / 15 min par e-mail (compte connu ou non — pas d'énumération par 429).
 - Jeton invalide, expiré ou déjà utilisé → **400** `Invalid or expired reset token.` (même message partout).
+- **Politique de mot de passe** (§12, si `password-policy-enabled=true`) : le nouveau mot de passe est
+  validé **avant** la consommation du jeton — un refus (`400 weak_password`) laisse le jeton utilisable.
 - **SMTP par défaut** (`SmtpPasswordResetEmailSender`) ; personnalisez avec votre propre bean
   `PasswordResetEmailSender` (SendGrid, API métier, console de dev…) — `spring.mail.*` n'est alors
   pas requis.
@@ -342,7 +358,37 @@ utilisez `@PreAuthorize("hasRole('ADMIN')")` (et non `hasAuthority('ADMIN')`) �
 - **Derrière un proxy** : `zrouga.security.trust-forwarded-for: true` fait lire `X-Forwarded-For` (défaut `false` : IP réelle).
 - Personnalisable : déclarez votre propre bean `LoginRateLimiter` (base de données, Redis, …).
 
-## 12. Personnalisation
+### Verrouillage de compte (optionnel)
+
+`zrouga.security.lockout-enabled: true` ajoute un verrou **par compte**, en plus du rate-limit :
+
+- après `lockout-max-attempts` échecs consécutifs (défaut 5), le compte répond **423** `account_locked`
+  pendant `lockout-duration-ms` (défaut 15 min) — **y compris avec le bon mot de passe** ;
+- une connexion réussie ou l'expiration du verrou remettent le compteur à zéro (après expiration, on repart de zéro) ;
+- un compte **inconnu** se verrouille de la même manière : aucun observable différent = pas d'énumération d'e-mails ;
+- les tentatives sur un compte verrouillé restent soumises au rate-limit (le verrou ne protège pas contre le flood) ;
+- complémentaire au rate-limit : rate-limit protège **par e-mail/IP** (fenêtre glissante), verrouillage **par compte** (durée fixe) ;
+- par défaut en mémoire (perdu au redémarrage, plafond de 10 000 comptes suivis) — déclarez votre propre bean
+  `AccountLockoutService` pour persister (Redis, base de données, déverrouillage admin via `reset(email)`).
+
+## 12. Politique de mot de passe (optionnelle)
+
+`zrouga.security.password-policy-enabled: true` valide le mot de passe sur `/signup` et `/reset-password` →
+**400** `weak_password`, avec la liste de **toutes** les règles manquantes dans le message.
+
+- **Règles** : `password-min-length` (défaut 8), `password-require-uppercase`, `password-require-lowercase`,
+  `password-require-digit`, `password-require-special` (défauts tous `true` ; le spécial = caractère non
+  alphanumérique non espace).
+- **Anti-réutilisation** : `password-history-count` (défaut 3, `0` = seul le mot de passe courant est vérifié) —
+  à la réinitialisation, refus du mot de passe **courant** et des **précédents** (`400 weak_password`).
+- **Jeton préservé** : sur `/reset-password`, la politique est validée **avant** la consommation du jeton —
+  un refus laisse le jeton utilisable pour une nouvelle tentative.
+- La validation `@Size` du DTO (8 à 128 caractères) reste active même sans politique.
+- Historique en mémoire par défaut (perdu au redémarrage ; le hash du mot de passe courant, lui, est toujours
+  vérifié) — déclarez votre propre bean `PasswordHistoryStore` pour le persister.
+- Personnalisable : déclarez votre propre bean `PasswordPolicy` (dictionnaire de mots de passe, NIST SP 800-63B, …).
+
+## 13. Personnalisation
 
 Tous les beans suivants sont surchargeables — déclarez le vôtre et celui du starter est remplacé :
 
@@ -358,6 +404,9 @@ Tous les beans suivants sont surchargeables — déclarez le vôtre et celui du 
 | `RefreshTokenService` | jetons d'expiration configurable |
 | `RefreshTokenStore` | JPA si disponible, sinon mémoire |
 | `LoginRateLimiter` | en mémoire (fenêtre par e-mail) |
+| `AccountLockoutService` | en mémoire (verrouillage de compte) |
+| `PasswordPolicy` | longueur + complexité (`password-*`) |
+| `PasswordHistoryStore` | en mémoire (anti-réutilisation) |
 | `PasswordResetTokenStore` | en mémoire (jetons de réinitialisation) |
 | `PasswordResetEmailSender` | SMTP (`spring.mail.*`), seulement si `reset-enabled=true` |
 | `AuthUserPasswordUpdater` | SPI projet hôte (requis si `reset-enabled=true`) |
@@ -370,7 +419,7 @@ Tous les beans suivants sont surchargeables — déclarez le vôtre et celui du 
 - **Image native GraalVM** : hints fournis (`ZrougaRuntimeHints` + `META-INF/spring/aot.factories`) pour les DTO réfléchis.
 - **Erreurs** : `AuthException` + sous-exceptions portent un `code()` machine ; `TokenControllerAdvice` ne traite que les exceptions du starter (déclarez le vôtre pour vos contrôleurs).
 
-## 13. Build / publication (mainteneur)
+## 14. Build / publication (mainteneur)
 
 ```powershell
 .\mvnw.cmd verify          # tests + jacoco + jar + sources + javadoc

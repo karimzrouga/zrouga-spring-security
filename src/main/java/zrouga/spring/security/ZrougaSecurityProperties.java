@@ -102,6 +102,58 @@ public class ZrougaSecurityProperties {
      */
     private String resetEmailFrom = "";
 
+    /**
+     * Active le <b>verrouillage de compte</b> après N connexions échouées —
+     * fonctionnalité <b>optionnelle, désactivée par défaut</b> (défaut : {@code false}).
+     *
+     * <p>Quand {@code true} : après {@code lockout-max-attempts} échecs consécutifs,
+     * le compte répond {@code 423 account_locked} pendant {@code lockout-duration-ms},
+     * même avec le bon mot de passe. Une connexion réussie ou la fin du verrou remettent
+     * le compteur à zéro. Complémentaire du rate-limit : le rate-limit protège par
+     * e-mail/IP, le verrouillage par compte.</p>
+     */
+    private boolean lockoutEnabled = false;
+
+    /** Connexions échouées avant verrouillage du compte (défaut : 5). */
+    private int lockoutMaxAttempts = 5;
+
+    /** Durée du verrouillage de compte en millisecondes (défaut : 15 minutes). */
+    private long lockoutDurationMs = 900_000L;
+
+    /**
+     * Active la <b>politique de mot de passe</b> (longueur + complexité + anti-réutilisation)
+     * sur {@code /signup} et {@code /reset-password} — fonctionnalité <b>optionnelle,
+     * désactivée par défaut</b> (défaut : {@code false}).
+     *
+     * <p>La validation {@code @Size} du DTO (8 à 128 caractères) reste active en permanence ;
+     * la politique ajoute les règles de complexité ci-dessous et l'historique
+     * {@code password-history-count} à la réinitialisation.</p>
+     */
+    private boolean passwordPolicyEnabled = false;
+
+    /** Longueur minimale du mot de passe quand la politique est active (défaut : 8). */
+    private int passwordMinLength = 8;
+
+    /** Exige au moins une majuscule (défaut : {@code true}). */
+    private boolean passwordRequireUppercase = true;
+
+    /** Exige au moins une minuscule (défaut : {@code true}). */
+    private boolean passwordRequireLowercase = true;
+
+    /** Exige au moins un chiffre (défaut : {@code true}). */
+    private boolean passwordRequireDigit = true;
+
+    /** Exige au moins un caractère spécial, non alphanumérique et non espace (défaut : {@code true}). */
+    private boolean passwordRequireSpecial = true;
+
+    /**
+     * Nombre de mots de passe précédents interdits à la réinitialisation (défaut : 3,
+     * {@code 0} = seul le mot de passe courant est vérifié). S'applique uniquement si
+     * {@code password-policy-enabled=true}. L'historique vit en mémoire par défaut —
+     * déclarez votre propre bean {@code PasswordHistoryStore} pour le persister.
+     */
+    private int passwordHistoryCount = 3;
+
     public String getJwtSecret() {
         return jwtSecret;
     }
@@ -204,5 +256,85 @@ public class ZrougaSecurityProperties {
 
     public void setResetEmailFrom(String resetEmailFrom) {
         this.resetEmailFrom = resetEmailFrom;
+    }
+
+    public boolean isLockoutEnabled() {
+        return lockoutEnabled;
+    }
+
+    public void setLockoutEnabled(boolean lockoutEnabled) {
+        this.lockoutEnabled = lockoutEnabled;
+    }
+
+    public int getLockoutMaxAttempts() {
+        return lockoutMaxAttempts;
+    }
+
+    public void setLockoutMaxAttempts(int lockoutMaxAttempts) {
+        this.lockoutMaxAttempts = lockoutMaxAttempts;
+    }
+
+    public long getLockoutDurationMs() {
+        return lockoutDurationMs;
+    }
+
+    public void setLockoutDurationMs(long lockoutDurationMs) {
+        this.lockoutDurationMs = lockoutDurationMs;
+    }
+
+    public boolean isPasswordPolicyEnabled() {
+        return passwordPolicyEnabled;
+    }
+
+    public void setPasswordPolicyEnabled(boolean passwordPolicyEnabled) {
+        this.passwordPolicyEnabled = passwordPolicyEnabled;
+    }
+
+    public int getPasswordMinLength() {
+        return passwordMinLength;
+    }
+
+    public void setPasswordMinLength(int passwordMinLength) {
+        this.passwordMinLength = passwordMinLength;
+    }
+
+    public boolean isPasswordRequireUppercase() {
+        return passwordRequireUppercase;
+    }
+
+    public void setPasswordRequireUppercase(boolean passwordRequireUppercase) {
+        this.passwordRequireUppercase = passwordRequireUppercase;
+    }
+
+    public boolean isPasswordRequireLowercase() {
+        return passwordRequireLowercase;
+    }
+
+    public void setPasswordRequireLowercase(boolean passwordRequireLowercase) {
+        this.passwordRequireLowercase = passwordRequireLowercase;
+    }
+
+    public boolean isPasswordRequireDigit() {
+        return passwordRequireDigit;
+    }
+
+    public void setPasswordRequireDigit(boolean passwordRequireDigit) {
+        this.passwordRequireDigit = passwordRequireDigit;
+    }
+
+    public boolean isPasswordRequireSpecial() {
+        return passwordRequireSpecial;
+    }
+
+    public void setPasswordRequireSpecial(boolean passwordRequireSpecial) {
+        this.passwordRequireSpecial = passwordRequireSpecial;
+    }
+
+    public int getPasswordHistoryCount() {
+        return passwordHistoryCount;
+    }
+
+    public void setPasswordHistoryCount(int passwordHistoryCount) {
+        this.passwordHistoryCount = passwordHistoryCount;
     }
 }
