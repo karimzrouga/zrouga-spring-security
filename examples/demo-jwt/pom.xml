@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.2</version>
+        <relativePath/>
+    </parent>
+    <groupId>zrouga.demo</groupId>
+    <artifactId>security-starter-demo-jwt</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>security-starter-demo-jwt</name>
+    <description>Demo du starter zrouga-spring-security, mode header (JWT stateless) : signin, signup, refresh, endpoint protégé</description>
+
+    <properties>
+        <java.version>21</java.version>
+        <zrouga.security.version>2.0.0</zrouga.security.version>
+    </properties>
+
+    <dependencies>
+        <!-- spring-boot-starter-web est OPTIONNEL dans le starter : à déclarer ici -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>zrouga.spring</groupId>
+            <artifactId>security-starter</artifactId>
+            <version>${zrouga.security.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: security-starter-demo-cookie
+
+# Port distinct de demo-jwt (8080) : les deux démos peuvent tourner en parallèle
+server:
+  port: 8081
+
+zrouga:
+  security:
+    # Mode d'authentification : cookie = Stateful Session Cookies
+    # (access token en cookie zrouga_access Path=/, refresh token en cookie
+    #  zrouga_refresh Path=/api/auth — les deux HttpOnly, lus automatiquement)
+    auth-mode: cookie
+    # false pour le dev en HTTP ; true en production derrière HTTPS
+    cookie-secure: false
+    cookie-same-site: Lax
+
+    # Base64 standard >= 64 octets (HS512) - secret de démonstration uniquement
+    jwt-secret: AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/QA==
+    cleanup-enabled: true
+
+    # Endpoints PUBLICS (sans jeton) - tout le reste est privé (cookie ou JWT requis)
+    public-paths:
+      - /api/auth/**
+      - /api/public/**
+
+    # Verrouillage de compte (2.1.0) : 3 échecs -> 423 account_locked 15 min
+    # (seuil bas pour la démo ; défaut 5)
+    lockout-enabled: true
+    lockout-max-attempts: 3
+
+    # Politique de mot de passe (2.1.0) : longueur + complexité + anti-réutilisation
+    password-policy-enabled: true
+    password-history-count: 3
+
+    # Réinitialisation sans SMTP : ConsolePasswordResetEmailSender imprime
+    # le jeton dans le log (remplace SmtpPasswordResetEmailSender)
+    # En mode cookie, un reset réussi vide aussi les cookies d'auth.
+    reset-enabled: true
+    reset-base-url: http://localhost:8081/reset-password

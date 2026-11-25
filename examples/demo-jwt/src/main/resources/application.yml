@@ -1,9 +1,13 @@
 spring:
   application:
-    name: security-starter-demo
+    name: security-starter-demo-jwt
 
 zrouga:
   security:
+    # Mode d'authentification : header = Stateless JWT
+    # (access token en Authorization: Bearer, refresh token dans le corps JSON)
+    auth-mode: header
+
     # Base64 standard >= 64 octets (HS512) - secret de démonstration uniquement
     jwt-secret: AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/QA==
     cleanup-enabled: true

@@ -1,8 +1,13 @@
-# security-starter-demo
+# security-starter-demo-jwt
 
-Application Spring Boot minimale utilisant `zrouga.spring:security-starter:2.0.0` :
-comptes en mémoire, inscription, connexion JWT, rotation de refresh token et un
+Application Spring Boot minimale utilisant `zrouga.spring:security-starter:2.0.0`
+en **mode `header`** (défaut) : Stateless JWT — access token transmis en
+`Authorization: Bearer`, refresh token dans le corps JSON de `/refreshtoken`.
+Comptes en mémoire, inscription, connexion, rotation de refresh token et un
 endpoint protégé `/api/me`.
+
+> Pour le mode **Stateful Session Cookies** (`auth-mode: cookie`), voir
+> [`../demo-cookie`](../demo-cookie).
 
 ## Prérequis
 
@@ -13,7 +18,7 @@ endpoint protégé `/api/me`.
 ## Lancer
 
 ```bash
-cd examples/demo
+cd examples/demo-jwt
 mvnw spring-boot:run
 ```
 
@@ -36,11 +41,11 @@ $base = "http://localhost:8080"
 $login = Invoke-RestMethod -Method Post -Uri "$base/api/auth/signin" `
     -ContentType "application/json" `
     -Body '{"email":"demo@demo.com","password":"Demo1234!"}'
-$login.accessToken   # JWT
+$login.token      # JWT
 $login.refreshToken
 
 # 2. Endpoint protégé
-Invoke-RestMethod -Uri "$base/api/me" -Headers @{ Authorization = "Bearer $($login.accessToken)" }
+Invoke-RestMethod -Uri "$base/api/me" -Headers @{ Authorization = "Bearer $($login.token)" }
 
 # 3. Rotation du refresh token (l'ancien devient invalide)
 Invoke-RestMethod -Method Post -Uri "$base/api/auth/refreshtoken" `
