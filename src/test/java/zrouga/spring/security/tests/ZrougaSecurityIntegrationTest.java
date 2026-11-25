@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -62,7 +63,7 @@ class ZrougaSecurityIntegrationTest {
     }
 
     @Test
-    void signinRetourneTokens() throws Exception {
+    void signinRetourneTokensSansCookieEnModeHeader() throws Exception {
         mockMvc.perform(post("/api/auth/signin")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + TestApplication.ADMIN_EMAIL + "\",\"password\":\""
@@ -70,7 +71,8 @@ class ZrougaSecurityIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.type").value("Bearer"))
                 .andExpect(jsonPath("$.token").isNotEmpty())
-                .andExpect(jsonPath("$.refreshToken").isNotEmpty());
+                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+                .andExpect(header().doesNotExist("Set-Cookie"));
     }
 
     @Test

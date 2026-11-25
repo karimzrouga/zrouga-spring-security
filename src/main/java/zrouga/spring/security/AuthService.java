@@ -23,6 +23,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.util.StringUtils;
 
 public class AuthService {
 
@@ -95,6 +96,12 @@ public class AuthService {
 
     public TokenRefreshResponse refreshtoken(TokenRefreshRequest request) {
         String requestRefreshToken = request.getRefreshToken();
+
+        // Corps vide et cookie absente : jeton manquant — même réponse que jeton inconnu
+        // (le repli cookie est fait par AuthResource avant l'appel).
+        if (!StringUtils.hasText(requestRefreshToken)) {
+            throw new TokenRefreshException(REFRESH_UNKNOWN_MESSAGE);
+        }
 
         Optional<StoredRefreshToken> refreshTokenOpt = refreshTokenService.findByToken(requestRefreshToken);
 

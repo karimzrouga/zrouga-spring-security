@@ -294,4 +294,20 @@ public class ZrougaSecurityAutoConfiguration {
             }
         };
     }
+
+    /**
+     * Validation de {@code zrouga.security.auth-mode} : échec explicite au démarrage
+     * sur une valeur inconnue (plutôt qu'un repli silencieux sur le mode header).
+     */
+    @Bean
+    public InitializingBean zrougaAuthModeValid(ZrougaSecurityProperties properties) {
+        return () -> {
+            String mode = properties.getAuthMode();
+            if (!"header".equalsIgnoreCase(mode) && !"cookie".equalsIgnoreCase(mode)) {
+                throw new IllegalStateException(
+                        "zrouga.security.auth-mode doit valoir 'header' ou 'cookie' (valeur actuelle : '"
+                                + mode + "').");
+            }
+        };
+    }
 }

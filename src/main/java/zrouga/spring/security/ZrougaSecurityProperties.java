@@ -154,6 +154,40 @@ public class ZrougaSecurityProperties {
      */
     private int passwordHistoryCount = 3;
 
+    /**
+     * Mode d'authentification — deux options (défaut : {@code header}) :
+     *
+     * <ul>
+     * <li><b>{@code header}</b> — <i>Stateless JWTs</i> : access token transmis via
+     *     {@code Authorization: Bearer <JWT>}, refresh token dans le corps JSON de
+     *     {@code /refreshtoken} (comportement historique) ;</li>
+     * <li><b>{@code cookie}</b> — <i>Stateful Session Cookies</i> : access token en
+     *     cookie {@code zrouga_access} ({@code HttpOnly}, {@code Path=/}) et refresh
+     *     token en cookie {@code zrouga_refresh} ({@code HttpOnly},
+     *     {@code Path=/api/auth}), lus automatiquement par le filtre et les endpoints
+     *     d'auth — le corps JSON reste identique (les deux coexistent).</li>
+     * </ul>
+     *
+     * <p>En mode {@code cookie}, pensez côté front à {@code withCredentials: true} et à
+     * un CORS {@code allowCredentials(true)} avec origines explicites ; les flags des
+     * cookies sont réglés par {@code cookie-secure} et {@code cookie-same-site}.</p>
+     */
+    private String authMode = "header";
+
+    /**
+     * Ajoute le drapeau {@code Secure} aux cookies d'auth (HTTPS uniquement) —
+     * défaut {@code false} pour le développement en HTTP ; <b>{@code true} en
+     * production</b>.
+     */
+    private boolean cookieSecure = false;
+
+    /**
+     * Attribution {@code SameSite} des cookies d'auth — défaut {@code Lax} ;
+     * valeurs possibles {@code Lax}, {@code Strict}, {@code None}.
+     * {@code None} impose aussi {@code cookie-secure=true} (front sur un autre domaine).
+     */
+    private String cookieSameSite = "Lax";
+
     public String getJwtSecret() {
         return jwtSecret;
     }
@@ -336,5 +370,29 @@ public class ZrougaSecurityProperties {
 
     public void setPasswordHistoryCount(int passwordHistoryCount) {
         this.passwordHistoryCount = passwordHistoryCount;
+    }
+
+    public String getAuthMode() {
+        return authMode;
+    }
+
+    public void setAuthMode(String authMode) {
+        this.authMode = authMode;
+    }
+
+    public boolean isCookieSecure() {
+        return cookieSecure;
+    }
+
+    public void setCookieSecure(boolean cookieSecure) {
+        this.cookieSecure = cookieSecure;
+    }
+
+    public String getCookieSameSite() {
+        return cookieSameSite;
+    }
+
+    public void setCookieSameSite(String cookieSameSite) {
+        this.cookieSameSite = cookieSameSite;
     }
 }

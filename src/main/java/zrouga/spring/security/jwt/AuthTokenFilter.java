@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 
+import zrouga.spring.security.AuthCookies;
 import zrouga.spring.security.UserDetailsImpl;
 
 import org.slf4j.Logger;
@@ -90,6 +91,9 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             return headerAuth.substring(7);
         }
 
-        return null;
+        // Mode cookie (zrouga.security.auth-mode=cookie) : repli sur la cookie HttpOnly
+        // d'access token — un même filtre sert les deux modes.
+        String cookieAuth = AuthCookies.read(request, AuthCookies.ACCESS_COOKIE);
+        return StringUtils.hasText(cookieAuth) ? cookieAuth : null;
     }
 }

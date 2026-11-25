@@ -112,6 +112,17 @@ class AutoConfigurationBackoffTest {
     }
 
     @Test
+    void authModeInvalideEchoueAuDemarrage() {
+        runner.withUserConfiguration(ProviderConfiguration.class)
+                .withPropertyValues("zrouga.security.auth-mode=bogus")
+                .run(context -> {
+                    Throwable failure = context.getStartupFailure();
+                    assertThat(failure).isNotNull();
+                    assertThat(messages(failure)).contains("auth-mode");
+                });
+    }
+
+    @Test
     void signupSansCreateurRenvoieSignupNotSupported() {
         runner.withUserConfiguration(ProviderConfiguration.class).run(context -> {
             SignupRequest request = new SignupRequest();

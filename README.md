@@ -50,6 +50,9 @@ zrouga:
     jwt-secret: <base64, >= 64 octets décodés>      # obligatoire
     jwt-expiration-ms: 1800000                       # défaut : 30 min
     jwt-refresh-expiration-ms: 86400000              # défaut : 24 h
+    auth-mode: header                                # défaut : header | cookie (§11)
+    cookie-secure: false                             # drapeau Secure des cookies d'auth (true en HTTPS)
+    cookie-same-site: Lax                            # SameSite des cookies : Lax | Strict | None
     public-paths:                                    # défaut : /api/auth/**
       - /api/auth/**
     rate-limit-max-attempts: 5                       # défaut : 5 échecs puis 429
@@ -122,6 +125,10 @@ Pour activer l'inscription (`/api/auth/signup`), déclarez en plus un bean `Auth
 | POST | `/api/auth/refreshtoken` | `{refreshToken}` → `{accessToken, refreshToken, tokenType: "Bearer"}` (**refreshToken tourné**) |
 | POST | `/api/auth/signout` | (Bearer) → `{message}` |
 
+En mode `cookie` (§11) : `/signin` et `/refreshtoken` posent en plus les cookies d'auth
+(réponse JSON identique), `/refreshtoken` accepte un corps vide (la cookie
+`zrouga_refresh` est lue automatiquement) et `/signout` vide les cookies.
+
 ### Erreurs — format unifié
 
 Toutes les erreurs du starter (400, 401, 403, 409, 423, 429, 501) ont la forme :
@@ -151,7 +158,7 @@ Tout le reste de l'API est `authenticated()` sauf `public-paths`.
 
 Corps : `{"email": "...", "password": "..."}` — mot de passe de **8 à 128 caractères**, e-mail valide.
 Réponse `201` : `{"message": "User registered successfully!"}` puis connectez-vous via `/signin`.
-Avec `password-policy-enabled=true`, le mot de passe doit en plus satisfaire la politique (§12) → `400 weak_password`.
+Avec `password-policy-enabled=true`, le mot de passe doit en plus satisfaire la politique (§13) → `400 weak_password`.
 
 L'inscription est **publique** (couverte par `public-paths` = `/api/auth/**`). Pour l'activer, déclarez un bean `AuthUserCreator` — c'est votre projet qui crée réellement l'utilisateur :
 
@@ -183,7 +190,7 @@ public class MonAuthUserCreator implements AuthUserCreator {
 | E-mail déjà utilisé | 409 |
 | Aucun bean `AuthUserCreator` déclaré | 501 (message : « declarez un bean AuthUserCreator… ») |
 | Corps invalide (e-mail, mot de passe < 8 caractères) | 400 |
-| Mot de passe refusé par la politique (§12) — `weak_password` | 400 |
+| Mot de passe refusé par la politique (§13) — `weak_password` | 400 |
 | Trop d'inscriptions ratées pour le même e-mail (rate-limit) | 429 |
 
 ## 6. Réinitialisation du mot de passe (optionnelle — SMTP)
@@ -236,7 +243,7 @@ public class MonPasswordUpdater implements AuthUserPasswordUpdater {
 
 - **Rate-limit** : 5 demandes / 15 min par e-mail (compte connu ou non — pas d'énumération par 429).
 - Jeton invalide, expiré ou déjà utilisé → **400** `Invalid or expired reset token.` (même message partout).
-- **Politique de mot de passe** (§12, si `password-policy-enabled=true`) : le nouveau mot de passe est
+- **Politique de mot de passe** (§13, si `password-policy-enabled=true`) : le nouveau mot de passe est
   validé **avant** la consommation du jeton — un refus (`400 weak_password`) laisse le jeton utilisable.
 - **SMTP par défaut** (`SmtpPasswordResetEmailSender`) ; personnalisez avec votre propre bean
   `PasswordResetEmailSender` (SendGrid, API métier, console de dev…) — `spring.mail.*` n'est alors
@@ -348,7 +355,52 @@ utilisez `@PreAuthorize("hasRole('ADMIN')")` (et non `hasAuthority('ADMIN')`) �
 - **Purge des expirés** : optionnelle — `zrouga.security.cleanup-enabled=true` active une purge périodique (`cleanup-fixed-delay-ms`), également des jetons de réinitialisation (§6).
 - Personnalisable : déclarez votre propre bean `RefreshTokenStore` — les auto-configs reculent.
 
-## 11. Rate-limiting (anti-bruteforce)
+## 11. Modes d'authentification
+
+Deux modes, commutables via `zrouga.security.auth-mode` — une valeur inconnue fait
+**échouer le démarrage** (pas de repli silencieux) :
+
+| Mode | Access token | Refresh token | Nature |
+|---|---|---|---|
+| `header` (défaut) | en-tête `Authorization: Bearer <JWT>` | corps JSON de `POST /refreshtoken` | **Stateless JWTs** |
+| `cookie` | cookie `zrouga_access` (`HttpOnly`, `Path=/`) | cookie `zrouga_refresh` (`HttpOnly`, `Path=/api/auth`) | **Stateful Session Cookies** |
+
+### Mode `header` (défaut)
+
+Comportement historique : le front stocke les deux tokens et renvoie le refresh
+dans le corps de `/refreshtoken`.
+
+### Mode `cookie`
+
+- `/signin` et `/refreshtoken` **posent** les deux cookies (réémis à chaque rotation,
+  donc invisible côté navigateur) ; le corps JSON reste identique — les tokens y
+  figurent aussi, les tests curl restent possibles.
+- Le filtre lit le header `Authorization` **puis** la cookie ; `/refreshtoken` lit le
+  corps **puis** la cookie : les deux transports coexistent sur la même application.
+- `/signout` et un `/reset-password` **réussi** vident les deux cookies (`Max-Age=0`) ;
+  un échec laisse la session intacte.
+- Flags : `cookie-secure` (défaut `false` pour le dev HTTP → `true` en production
+  HTTPS) et `cookie-same-site` (défaut `Lax` ; `None` impose `cookie-secure: true`
+  si le front est sur un autre domaine).
+- **Front (SPA)** : `withCredentials: true` + CORS `allowCredentials(true)` avec des
+  **origines explicites** (jamais `*`).
+- **CSRF** : CSRF reste désactivé dans la chaîne — les cookies `SameSite=Lax`
+  (défaut) ne sont pas envoyés en cross-site ; préférez `Strict` si front et API
+  partagent un domaine.
+- La session Spring reste `STATELESS` (aucun `HttpSession`) : les cookies ne
+  transportent que les tokens.
+
+```yaml
+zrouga:
+  security:
+    auth-mode: cookie            # défaut : header
+    cookie-secure: false         # true en production (HTTPS)
+    cookie-same-site: Lax        # Lax | Strict | None
+```
+
+Voir les démos : `examples/demo-jwt` (header) et `examples/demo-cookie` (cookie).
+
+## 12. Rate-limiting (anti-bruteforce)
 
 5 tentatives échouées par e-mail puis 15 minutes de blocage (429), par défaut — réglable via
 `rate-limit-max-attempts` / `rate-limit-window-ms`. Une connexion réussie remet le compteur à zéro.
@@ -371,7 +423,7 @@ utilisez `@PreAuthorize("hasRole('ADMIN')")` (et non `hasAuthority('ADMIN')`) �
 - par défaut en mémoire (perdu au redémarrage, plafond de 10 000 comptes suivis) — déclarez votre propre bean
   `AccountLockoutService` pour persister (Redis, base de données, déverrouillage admin via `reset(email)`).
 
-## 12. Politique de mot de passe (optionnelle)
+## 13. Politique de mot de passe (optionnelle)
 
 `zrouga.security.password-policy-enabled: true` valide le mot de passe sur `/signup` et `/reset-password` →
 **400** `weak_password`, avec la liste de **toutes** les règles manquantes dans le message.
@@ -388,7 +440,7 @@ utilisez `@PreAuthorize("hasRole('ADMIN')")` (et non `hasAuthority('ADMIN')`) �
   vérifié) — déclarez votre propre bean `PasswordHistoryStore` pour le persister.
 - Personnalisable : déclarez votre propre bean `PasswordPolicy` (dictionnaire de mots de passe, NIST SP 800-63B, …).
 
-## 13. Personnalisation
+## 14. Personnalisation
 
 Tous les beans suivants sont surchargeables — déclarez le vôtre et celui du starter est remplacé :
 
@@ -400,7 +452,7 @@ Tous les beans suivants sont surchargeables — déclarez le vôtre et celui du 
 | `AuthenticationProvider` | `DaoAuthenticationProvider` |
 | `UserDetailsService` | lit via `AuthUserProvider` |
 | `JwtUtils` | HS512 + secret `zrouga.security.jwt-secret` |
-| `AuthTokenFilter` | filtre Bearer |
+| `AuthTokenFilter` | filtre Bearer (et cookie `zrouga_access` en mode `cookie`) |
 | `RefreshTokenService` | jetons d'expiration configurable |
 | `RefreshTokenStore` | JPA si disponible, sinon mémoire |
 | `LoginRateLimiter` | en mémoire (fenêtre par e-mail) |
@@ -419,7 +471,7 @@ Tous les beans suivants sont surchargeables — déclarez le vôtre et celui du 
 - **Image native GraalVM** : hints fournis (`ZrougaRuntimeHints` + `META-INF/spring/aot.factories`) pour les DTO réfléchis.
 - **Erreurs** : `AuthException` + sous-exceptions portent un `code()` machine ; `TokenControllerAdvice` ne traite que les exceptions du starter (déclarez le vôtre pour vos contrôleurs).
 
-## 14. Build / publication (mainteneur)
+## 15. Build / publication (mainteneur)
 
 ```powershell
 .\mvnw.cmd verify          # tests + jacoco + jar + sources + javadoc
@@ -429,7 +481,7 @@ $env:GITHUB_TOKEN = gh auth token   # scope write:packages
 
 - **CI GitHub Actions** (`.github/workflows/ci.yml`) : `mvnw verify` à chaque push/PR ; publication automatique sur tag `v*`.
 - **Release** : merge sur `main`, tag `v2.0.0` → la CI publie la version.
-- **Exemple d'application** : `examples/demo/` (comptes mémoire, `/api/me` protégé) — le starter doit être `mvnw installé` localement avant de le builder.
+- **Exemple d'application** : `examples/demo-jwt/` (Stateless JWT en header) et `examples/demo-cookie/` (Stateful Session Cookies) — le starter doit être `mvnw installé` localement avant de les builder.
 - **Couverture** : rapport JaCoCo dans `target/site/jacoco/` (seuil verrouillé : ≥ 80 % instructions, ≥ 55 % branches).
 - **Métadonnées IDE** : autocomplétion et descriptions des propriétés `zrouga.security.*` (configuration-processor).
 

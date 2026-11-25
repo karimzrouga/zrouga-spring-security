@@ -37,6 +37,24 @@ comportement 2.0.0 est inchangé tant qu'elles ne sont pas activées.
   `weak_password` (HTTP 400) — ajoutées au `TokenControllerAdvice`.
 - **Beans surchargeables** : `AccountLockoutService`, `PasswordPolicy`,
   `PasswordHistoryStore` (autoconfiguration recule si vous déclarez le vôtre).
+- **Modes d'authentification** (`zrouga.security.auth-mode`, défaut `header`) :
+  - `header` — Stateless JWTs (comportement historique) : access token en
+    `Authorization: Bearer`, refresh token dans le corps JSON ;
+  - `cookie` — Stateful Session Cookies : access token en cookie `zrouga_access`
+    (`HttpOnly`, `Path=/`), refresh token en cookie `zrouga_refresh` (`HttpOnly`,
+    `Path=/api/auth`). `/signin` et `/refreshtoken` posent/réémettent les cookies
+    (rotation invisible), le filtre lit le header **puis** la cookie,
+    `/refreshtoken` lit le corps **puis** la cookie (les deux transports
+    coexistent), `/signout` et un `/reset-password` réussi vident les cookies.
+    Flags : `cookie-secure` (défaut `false`) et `cookie-same-site` (défaut
+    `Lax`). Valeur inconnue → échec au démarrage.
+
+### Changed
+
+- `POST /api/auth/refreshtoken` : le champ `refreshToken` n'est plus `@NotBlank`
+  (nécessaire au mode `cookie` où le corps est vide) — un jeton absent du corps
+  **et** de la cookie renvoie désormais `403 refresh_token_rejected` (au lieu
+  d'un `400 validation_error`).
 
 ## [2.0.0] - 2026-11-23
 
@@ -106,8 +124,9 @@ compatibles avec les données (tokens) ni les implémentations SPI de cette vers
   (DTO réfléchis pour les images natives).
 - **Purge** : `RefreshTokenCleanup` purge aussi les jetons de réinitialisation ;
   le store en mémoire purge opportunément au-delà de 10 000 entrées.
-- **Exemple d'application** : `examples/demo/` (comptes mémoire, endpoint
-  protégé `/api/me`, flux signin/refresh/signup documenté).
+- **Exemple d'application** : `examples/demo-jwt/` (renommé depuis `demo/`,
+  puis rejoint par `examples/demo-cookie/` en 2.1.0) — comptes mémoire, endpoint
+  protégé `/api/me`, flux signin/refresh/signup documenté.
 - **Couverture verrouillée** : règle `jacoco:check` au build (≥ 80 %
   d'instructions, ≥ 55 % de branches).
 
