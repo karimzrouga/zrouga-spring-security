@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>zrouga-spring-security — démo cookie</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    margin: 0; padding: 2rem 1rem; line-height: 1.5;
+    background: Canvas; color: CanvasText;
+  }
+  main { max-width: 780px; margin: 0 auto; display: grid; gap: 1.25rem; }
+  header { max-width: 780px; margin: 0 auto 1.5rem; }
+  h1 { margin: 0 0 .25rem; font-size: 1.5rem; }
+  h2 { margin: 0 0 .75rem; font-size: 1.05rem; }
+  section { border: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+            border-radius: 10px; padding: 1rem 1.25rem; }
+  form { display: grid; gap: .6rem; grid-template-columns: 1fr 1fr auto; align-items: end; }
+  form .full { grid-column: 1 / -1; }
+  label { display: grid; gap: .25rem; font-size: .85rem; opacity: .85; }
+  input {
+    font: inherit; padding: .45rem .6rem; border-radius: 6px;
+    border: 1px solid color-mix(in srgb, CanvasText 30%, transparent);
+    background: Canvas; color: CanvasText;
+  }
+  button {
+    font: inherit; padding: .5rem .9rem; border-radius: 6px; cursor: pointer;
+    border: 1px solid color-mix(in srgb, CanvasText 35%, transparent);
+    background: color-mix(in srgb, CanvasText 8%, Canvas); color: CanvasText;
+  }
+  button:hover { background: color-mix(in srgb, CanvasText 15%, Canvas); }
+  .row { display: flex; flex-wrap: wrap; gap: .6rem; }
+  pre {
+    margin: 0; padding: .75rem; border-radius: 8px; overflow-x: auto;
+    background: color-mix(in srgb, CanvasText 7%, Canvas);
+    font-size: .82rem; min-height: 4.5rem; white-space: pre-wrap; word-break: break-word;
+  }
+  .hint { font-size: .82rem; opacity: .7; margin: .35rem 0 0; }
+  @media (max-width: 640px) { form { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Démo mode cookie</h1>
+  <p class="hint">
+    zrouga-spring-security — Stateful Session Cookies : l'access token est stocké dans la
+    cookie <code>zrouga_access</code> et le refresh dans <code>zrouga_refresh</code>
+    (HttpOnly) — <strong>aucun token dans le corps ou les en-têtes</strong>.
+    Toutes les requêtes utilisent <code>credentials: 'include'</code>.
+  </p>
+</header>
+
+<main>
+  <section>
+    <h2>1. Inscription</h2>
+    <form id="signup-form">
+      <label class="full">E-mail
+        <input type="email" id="su-email" required placeholder="demo@example.com">
+      </label>
+      <label class="full">Mot de passe <span style="opacity:.6">(min. 8 caractères)</span>
+        <input type="password" id="su-password" required minlength="8" placeholder="••••••••">
+      </label>
+      <button class="full" type="submit">POST /api/auth/signup</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>2. Connexion</h2>
+    <form id="signin-form">
+      <label class="full">E-mail
+        <input type="email" id="si-email" required placeholder="demo@example.com">
+      </label>
+      <label class="full">Mot de passe
+        <input type="password" id="si-password" required placeholder="••••••••">
+      </label>
+      <button class="full" type="submit">POST /api/auth/signin</button>
+    </form>
+    <p class="hint">En cas de succès, le navigateur reçoit les cookies d'authentification
+      (HttpOnly, SameSite=Lax) — consultez-les dans les outils du navigateur.</p>
+  </section>
+
+  <section>
+    <h2>3. Appels (cookies envoyés automatiquement)</h2>
+    <div class="row">
+      <button id="btn-me">GET /api/me</button>
+      <button id="btn-refresh">POST /api/auth/refreshtoken</button>
+      <button id="btn-signout">POST /api/auth/signout</button>
+      <button id="btn-public">GET /api/public/hello</button>
+    </div>
+    <p class="hint">Sans connexion, <code>/api/me</code> renvoie <code>401</code> ;
+      après signout, il redevient <code>401</code>.</p>
+  </section>
+
+  <section>
+    <h2>Dernière réponse</h2>
+    <pre id="out">—</pre>
+  </section>
+</main>
+
+<script>
+  const out = document.getElementById('out');
+
+  async function call(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      credentials: 'include',
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined
+    });
+    let data;
+    try { data = await res.json(); } catch (e) { data = '(réponse vide)'; }
+    out.textContent = 'HTTP ' + res.status + ' ' + res.statusText + '\n\n' +
+      JSON.stringify(data, null, 2);
+  }
+
+  document.getElementById('signup-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    call('POST', '/api/auth/signup', {
+      email: document.getElementById('su-email').value.trim(),
+      password: document.getElementById('su-password').value
+    });
+  });
+
+  document.getElementById('signin-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    call('POST', '/api/auth/signin', {
+      email: document.getElementById('si-email').value.trim(),
+      password: document.getElementById('si-password').value
+    });
+  });
+
+  document.getElementById('btn-me').addEventListener('click',
+    () => call('GET', '/api/me'));
+  document.getElementById('btn-refresh').addEventListener('click',
+    () => call('POST', '/api/auth/refreshtoken', {}));
+  document.getElementById('btn-signout').addEventListener('click',
+    () => call('POST', '/api/auth/signout'));
+  document.getElementById('btn-public').addEventListener('click',
+    () => call('GET', '/api/public/hello'));
+</script>
+</body>
+</html>

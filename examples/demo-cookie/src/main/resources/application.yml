@@ -24,6 +24,9 @@ zrouga:
     public-paths:
       - /api/auth/**
       - /api/public/**
+      # Front statique intégré (démo cookie) : page d'accueil sans authentification
+      - /
+      - /index.html
 
     # Verrouillage de compte (2.1.0) : 3 échecs -> 423 account_locked 15 min
     # (seuil bas pour la démo ; défaut 5)

@@ -16,7 +16,9 @@
 
     <properties>
         <java.version>21</java.version>
-        <zrouga.security.version>2.1.0</zrouga.security.version>
+        <zrouga.security.version>2.2.0</zrouga.security.version>
+        <!-- 3.2.0 = ligne springdoc pour Spring Boot 4.1.x (construit sur 4.1.2) -->
+        <springdoc.version>3.2.0</springdoc.version>
     </properties>
 
     <dependencies>
@@ -29,6 +31,12 @@
             <groupId>zrouga.spring</groupId>
             <artifactId>security-starter</artifactId>
             <version>${zrouga.security.version}</version>
+        </dependency>
+        <!-- Documentation OpenAPI (pt 19) : /v3/api-docs + Swagger UI sur /swagger-ui.html -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

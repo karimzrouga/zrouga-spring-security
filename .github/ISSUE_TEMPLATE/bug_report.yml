@@ -1,0 +1,64 @@
+name: Rapport de bug
+description: Signaler un bug dans zrouga-spring-security
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de prendre le temps de décrire le bug. **Ne postez jamais de secrets
+        réels** (clés JWT, mots de passe, jetons) dans le rapport.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Que se passe-t-il ? Quel comportement attendiez-vous ?
+      placeholder: "Le démarrage échoue avec ... lorsque ..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Étapes pour reproduire
+      description: Une liste numérotée, ou un lien vers un dépôt/branch minimal.
+      placeholder: |
+        1. Ajouter la dépendance ...
+        2. Configurer `zrouga.security.*` ...
+        3. Appeler `POST /api/auth/signin` ...
+        4. Observer ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version du starter
+      description: Version Maven (ex. `2.2.0`) — voir le tag GitHub ou le CHANGELOG.
+      placeholder: "2.2.0"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environnement
+      description: JDK, Spring Boot, OS, mode d'authentification (header/cookie).
+      placeholder: |
+        - JDK : 21 (Temurin)
+        - Spring Boot : 4.1.2
+        - OS : Windows 11 / Ubuntu 24.04
+        - zrouga.security.auth-mode : header
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / stacktrace
+      description: Extraits pertinents (anonymisés). Vous pouvez joindre un fichier.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Avant de soumettre
+      options:
+        - label: J'ai cherché dans les issues existantes (ouvertes et fermées).
+          required: true
+        - label: J'ai reproduit le bug avec la dernière version stable.
+          required: true

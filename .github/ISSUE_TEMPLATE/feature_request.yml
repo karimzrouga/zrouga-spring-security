@@ -1,0 +1,47 @@
+name: Demande de fonctionnalité
+description: Proposer une amélioration ou une nouvelle fonctionnalité
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Décrivez le besoin et l'usage concret. Les propositions alignées sur la
+        feuille de route du starter (sécurité, observabilité, DX) sont les bienvenues.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problème / besoin
+      description: Quel problème cette fonctionnalité résout-elle pour les utilisateurs du starter ?
+      placeholder: "Aujourd'hui, il faut écrire ... à la main pour ..."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solution envisagée
+      description: API, propriété de configuration ou comportement proposé.
+      placeholder: |
+        - Nouvelle propriété `zrouga.security.*` ...
+        - Nouvel endpoint `POST /api/auth/...` ...
+        - Événement / métrique ...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives envisagées
+      description: Autres approches ou contournements existants.
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexte supplémentaire
+      description: Liens (RFC, docs, issues), exemples d'usage, compatibilité souhaitée.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Avant de soumettre
+      options:
+        - label: J'ai cherché dans les issues existantes (ouvertes et fermées).
+          required: true
+        - label: Cette demande ne casse pas la compatibilité binaire existante (ou je l'assume et je l'explique).
+          required: true

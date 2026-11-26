@@ -16,6 +16,10 @@ zrouga:
     public-paths:
       - /api/auth/**
       - /api/public/**
+      # Documentation OpenAPI (springdoc 3.x) : Swagger UI + spec sans authentification
+      - /swagger-ui.html
+      - /swagger-ui/**
+      - /v3/api-docs/**
 
     # Verrouillage de compte (2.1.0) : 3 échecs -> 423 account_locked 15 min
     # (seuil bas pour la démo ; défaut 5)
