@@ -61,6 +61,7 @@ public class JwtUtils {
      */
     public String generateJwtToken(UserDetailsImpl userPrincipal) {
         return Jwts.builder()
+                .setId(java.util.UUID.randomUUID().toString())
                 .setSubject(userPrincipal.getUsername())
                 .setIssuedAt(new Date())
                 .claim("id", userPrincipal.getId())
@@ -88,5 +89,24 @@ public class JwtUtils {
             logger.debug("Jeton JWT invalide : {}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Génère le challenge éphémère échangé contre les tokens quand la 2FA est
+     * active ({@code two-factor-challenge-ttl-ms}, 5 min par défaut) — porteur
+     * du claim {@code 2fa} et du sujet (e-mail).
+     *
+     * @param email e-mail du compte à vérifier
+     * @return le jeton compact
+     */
+    public String generateTwoFactorChallengeToken(String email) {
+        return Jwts.builder()
+                .setId(java.util.UUID.randomUUID().toString())
+                .setSubject(email)
+                .setIssuedAt(new Date())
+                .claim("2fa", true)
+                .setExpiration(new Date(System.currentTimeMillis() + properties.getTwoFactorChallengeTtlMs()))
+                .signWith(secretKey, Jwts.SIG.HS512)
+                .compact();
     }
 }

@@ -118,7 +118,12 @@ class RefreshTokenRotationConcurrencyTest {
                 null,
                 mock(org.springframework.beans.factory.ObjectProvider.class),
                 new InMemoryAccountLockoutService(properties),
-                new PasswordPolicy(properties));
+                new PasswordPolicy(properties),
+                properties,
+                zrouga.spring.security.AccessTokenRevocation.disabled(),
+                event -> {
+                },
+                new zrouga.spring.security.InMemoryTwoFactorSecretStore());
     }
 
     @Test

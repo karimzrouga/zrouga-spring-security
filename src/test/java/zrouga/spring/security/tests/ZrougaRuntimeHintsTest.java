@@ -12,10 +12,15 @@ import zrouga.spring.security.payload.ForgotPasswordRequest;
 import zrouga.spring.security.payload.JwtResponse;
 import zrouga.spring.security.payload.LoginRequest;
 import zrouga.spring.security.payload.MessageResponse;
+import zrouga.spring.security.payload.ResendVerificationRequest;
 import zrouga.spring.security.payload.ResetPasswordRequest;
 import zrouga.spring.security.payload.SignupRequest;
 import zrouga.spring.security.payload.TokenRefreshRequest;
 import zrouga.spring.security.payload.TokenRefreshResponse;
+import zrouga.spring.security.payload.TwoFactorCodeRequest;
+import zrouga.spring.security.payload.TwoFactorSetupResponse;
+import zrouga.spring.security.payload.TwoFactorVerifyRequest;
+import zrouga.spring.security.payload.VerifyEmailRequest;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.aot.hint.RuntimeHints;
@@ -29,10 +34,15 @@ class ZrougaRuntimeHintsTest {
             JwtResponse.class,
             LoginRequest.class,
             MessageResponse.class,
+            ResendVerificationRequest.class,
             ResetPasswordRequest.class,
             SignupRequest.class,
             TokenRefreshRequest.class,
-            TokenRefreshResponse.class);
+            TokenRefreshResponse.class,
+            TwoFactorCodeRequest.class,
+            TwoFactorSetupResponse.class,
+            TwoFactorVerifyRequest.class,
+            VerifyEmailRequest.class);
 
     private RuntimeHints hints() {
         RuntimeHints hints = new RuntimeHints();

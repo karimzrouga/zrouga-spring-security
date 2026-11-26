@@ -35,6 +35,14 @@ public class RefreshTokenEntity {
     @Column(nullable = false)
     private boolean revoked;
 
+    /** IP du client à la création (binding optionnel, nullable). */
+    @Column(name = "ip")
+    private String ip;
+
+    /** User-Agent du client à la création (binding optionnel, nullable). */
+    @Column(name = "user_agent")
+    private String userAgent;
+
     public long getId() {
         return id;
     }
@@ -69,5 +77,21 @@ public class RefreshTokenEntity {
 
     public void setRevoked(boolean revoked) {
         this.revoked = revoked;
+    }
+
+    public String getIp() {
+        return ip;
+    }
+
+    public void setIp(String ip) {
+        this.ip = ip;
+    }
+
+    public String getUserAgent() {
+        return userAgent;
+    }
+
+    public void setUserAgent(String userAgent) {
+        this.userAgent = userAgent;
     }
 }

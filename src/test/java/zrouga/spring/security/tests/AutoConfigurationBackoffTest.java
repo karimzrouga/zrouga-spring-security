@@ -10,6 +10,7 @@ import zrouga.spring.security.AuthService;
 import zrouga.spring.security.AuthUser;
 import zrouga.spring.security.AuthUserPasswordUpdater;
 import zrouga.spring.security.AuthUserProvider;
+import zrouga.spring.security.EmailVerificationService;
 import zrouga.spring.security.InMemoryRefreshTokenStore;
 import zrouga.spring.security.PasswordResetEmailSender;
 import zrouga.spring.security.PasswordResetService;
@@ -73,6 +74,7 @@ class AutoConfigurationBackoffTest {
             assertThat(context).hasSingleBean(AuthTokenFilter.class);
             assertThat(context).hasSingleBean(AuthService.class);
             assertThat(context).hasSingleBean(AuthResource.class);
+            assertThat(context).hasSingleBean(EmailVerificationService.class);
             assertThat(context).hasSingleBean(TokenControllerAdvice.class);
             assertThat(context).hasSingleBean(AuthEntryPointJwt.class);
             assertThat(context).hasSingleBean(UserDetailsServiceImpl.class);
@@ -84,6 +86,13 @@ class AutoConfigurationBackoffTest {
             assertThat(context).hasSingleBean(zrouga.spring.security.AccountLockoutService.class);
             assertThat(context).hasSingleBean(zrouga.spring.security.PasswordPolicy.class);
             assertThat(context).hasSingleBean(zrouga.spring.security.PasswordHistoryStore.class);
+            assertThat(context).hasSingleBean(zrouga.spring.security.AccessTokenRevocation.class);
+            assertThat(context).hasSingleBean(zrouga.spring.security.AccessTokenRevocationStore.class);
+            assertThat(context).hasSingleBean(zrouga.spring.security.TwoFactorSecretStore.class);
+            assertThat(context.getBean(zrouga.spring.security.AccessTokenRevocationStore.class))
+                    .isInstanceOf(zrouga.spring.security.InMemoryAccessTokenRevocationStore.class);
+            assertThat(context.getBean(zrouga.spring.security.TwoFactorSecretStore.class))
+                    .isInstanceOf(zrouga.spring.security.InMemoryTwoFactorSecretStore.class);
             assertThat(context.getBean(PasswordEncoder.class)).isInstanceOf(BCryptPasswordEncoder.class);
             assertThat(context.getBean(LoginRateLimiter.class)).isInstanceOf(InMemoryLoginRateLimiter.class);
             assertThat(context.getBean(zrouga.spring.security.AccountLockoutService.class))
@@ -120,6 +129,37 @@ class AutoConfigurationBackoffTest {
                     assertThat(failure).isNotNull();
                     assertThat(messages(failure)).contains("auth-mode");
                 });
+    }
+
+    @Test
+    void cookieSameSiteInvalideEchoueAuDemarrage() {
+        runner.withUserConfiguration(ProviderConfiguration.class)
+                .withPropertyValues("zrouga.security.cookie-same-site=bogus")
+                .run(context -> {
+                    Throwable failure = context.getStartupFailure();
+                    assertThat(failure).isNotNull();
+                    assertThat(messages(failure)).contains("cookie-same-site");
+                });
+    }
+
+    @Test
+    void cookieSameSiteNoneSansSecureEchoueAuDemarrage() {
+        runner.withUserConfiguration(ProviderConfiguration.class)
+                .withPropertyValues("zrouga.security.cookie-same-site=None")
+                .run(context -> {
+                    Throwable failure = context.getStartupFailure();
+                    assertThat(failure).isNotNull();
+                    assertThat(messages(failure)).contains("cookie-secure");
+                });
+    }
+
+    @Test
+    void cookieSameSiteNoneAvecSecureDemarre() {
+        runner.withUserConfiguration(ProviderConfiguration.class)
+                .withPropertyValues(
+                        "zrouga.security.cookie-same-site=None",
+                        "zrouga.security.cookie-secure=true")
+                .run(context -> assertThat(context).hasNotFailed());
     }
 
     @Test
@@ -345,9 +385,14 @@ class AutoConfigurationBackoffTest {
                 PasswordEncoder passwordEncoder,
                 org.springframework.beans.factory.ObjectProvider<zrouga.spring.security.AuthUserCreator> creatorProvider,
                 zrouga.spring.security.AccountLockoutService accountLockoutService,
-                zrouga.spring.security.PasswordPolicy passwordPolicy) {
+                zrouga.spring.security.PasswordPolicy passwordPolicy,
+                ZrougaSecurityProperties properties,
+                zrouga.spring.security.AccessTokenRevocation accessTokenRevocation,
+                org.springframework.context.ApplicationEventPublisher eventPublisher,
+                zrouga.spring.security.TwoFactorSecretStore twoFactorSecretStore) {
             return new AuthService(authenticationManager, userProvider, jwtUtils, refreshTokenService,
-                    loginRateLimiter, passwordEncoder, creatorProvider, accountLockoutService, passwordPolicy);
+                    loginRateLimiter, passwordEncoder, creatorProvider, accountLockoutService, passwordPolicy,
+                    properties, accessTokenRevocation, eventPublisher, twoFactorSecretStore);
         }
 
         @Bean
@@ -363,8 +408,8 @@ class AutoConfigurationBackoffTest {
 
         @Bean
         AuthResource customAuthResource(AuthService authService, PasswordResetService passwordResetService,
-                ZrougaSecurityProperties properties) {
-            return new AuthResource(authService, passwordResetService, properties);
+                EmailVerificationService emailVerificationService, ZrougaSecurityProperties properties) {
+            return new AuthResource(authService, passwordResetService, emailVerificationService, properties);
         }
 
         @Bean

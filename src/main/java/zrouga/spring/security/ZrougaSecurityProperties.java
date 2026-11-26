@@ -182,11 +182,93 @@ public class ZrougaSecurityProperties {
     private boolean cookieSecure = false;
 
     /**
+     * Active la <b>vérification de l'e-mail à l'inscription</b> — fonctionnalité
+     * <b>optionnelle, désactivée par défaut</b> (défaut : {@code false}).
+     *
+     * <p>Quand {@code true} : après {@code /signup}, un e-mail contenant un jeton
+     * usage unique est envoyé ; {@code POST /api/auth/verify-email} consomme le
+     * jeton et appelle {@link AuthUserEmailVerifier#verifyEmail(String)} (bean
+     * requis). {@code POST /api/auth/resend-verification} renvoie un jeton neuf.
+     * L'application décide elle-même de bloquer l'accès tant que l'e-mail n'est
+     * pas vérifié (le stockage de l'état reste côté app).</p>
+     */
+    private boolean emailVerificationEnabled = false;
+
+    /**
+     * URL de la page de vérification côté front — obligatoire si
+     * {@code email-verification-enabled=true}. Le jeton est ajouté en query
+     * param {@code ?token=…}.
+     */
+    private String emailVerificationBaseUrl;
+
+    /** Durée de vie du jeton de vérification en millisecondes (défaut : 24 heures). */
+    private long emailVerificationTokenTtlMs = 86_400_000L;
+
+    /**
+     * Adresse expéditrice des e-mails de vérification — si absent, le
+     * {@code JavaMailSender} ({@code spring.mail.username}) est utilisé.
+     */
+    private String emailVerificationFrom;
+
+    /**
+     * Active la <b>double authentification TOTP</b> (Google Authenticator, Authy…)
+     * — fonctionnalité <b>optionnelle, désactivée par défaut</b> (défaut : {@code false}).
+     *
+     * <p>Flux : {@code POST /2fa/setup} génère un secret Base32 (+ URI
+     * {@code otpauth://} pour le QR), {@code /2fa/enable} le valide par un code,
+     * puis un signin pour un compte activé répond {@code twoFactorRequired=true}
+     * avec un {@code twoFactorToken} éphémère au lieu des tokens —
+     * {@code POST /2fa/verify} échange code + jeton contre les tokens normaux.
+     * {@code /2fa/disable} désactive (code requis).</p>
+     */
+    private boolean twoFactorEnabled = false;
+
+    /** Nom affiché dans l'URI {@code otpauth://} et le QR (défaut : {@code zrouga}). */
+    private String twoFactorIssuer = "zrouga";
+
+    /** Durée de vie du challenge {@code twoFactorToken} en millisecondes (défaut : 5 minutes). */
+    private long twoFactorChallengeTtlMs = 300_000L;
+
+    /**
      * Attribution {@code SameSite} des cookies d'auth — défaut {@code Lax} ;
      * valeurs possibles {@code Lax}, {@code Strict}, {@code None}.
-     * {@code None} impose aussi {@code cookie-secure=true} (front sur un autre domaine).
+     * {@code None} impose aussi {@code cookie-secure=true} (front sur un autre domaine) —
+     * vérifié au démarrage.
      */
     private String cookieSameSite = "Lax";
+
+    /**
+     * Active la <b>révocation des access tokens</b> à la déconnexion —
+     * fonctionnalité <b>optionnelle, désactivée par défaut</b> (défaut : {@code false}).
+     *
+     * <p>Un JWT reste valide jusqu'à son expiration même après {@code /signout} :
+     * quand {@code true}, le {@code jti} du jeton présenté est ajouté à une liste
+     * noire ({@link AccessTokenRevocationStore}) et le filtre le refuse, y compris
+     * si un jeton volé est rejoué. Sans effet sur les jetons émis avant l'activation.</p>
+     */
+    private boolean revocationEnabled = false;
+
+    /**
+     * Autorise les <b>sessions concurrentes</b> (plusieurs appareils connectés) —
+     * fonctionnalité <b>optionnelle, désactivée par défaut</b> (défaut : {@code false}).
+     *
+     * <p>Par défaut, un {@code /signin} révoque tous les refresh tokens précédents
+     * de l'utilisateur (politique mono-session). Avec {@code true}, chaque
+     * connexion crée une famille indépendante : mobile et desktop coexistent ;
+     * {@code /signout} ne révoque que la famille de la session courante.</p>
+     */
+    private boolean concurrentSessionsEnabled = false;
+
+    /**
+     * Active le <b>liaison refresh token ↔ IP/User-Agent</b> — fonctionnalité
+     * <b>optionnelle, désactivée par défaut</b> (défaut : {@code false}).
+     *
+     * <p>Quand {@code true}, un refresh présenté depuis une IP ou un User-Agent
+     * différents de ceux enregistrés à la création révoque la famille entière et
+     * répond {@code 403} (vol potentiel). Les jetons créés sans binding (avant
+     * l'activation, ou stores personnalisés) restent utilisables.</p>
+     */
+    private boolean refreshBindingEnabled = false;
 
     public String getJwtSecret() {
         return jwtSecret;
@@ -394,5 +476,85 @@ public class ZrougaSecurityProperties {
 
     public void setCookieSameSite(String cookieSameSite) {
         this.cookieSameSite = cookieSameSite;
+    }
+
+    public boolean isRevocationEnabled() {
+        return revocationEnabled;
+    }
+
+    public void setRevocationEnabled(boolean revocationEnabled) {
+        this.revocationEnabled = revocationEnabled;
+    }
+
+    public boolean isConcurrentSessionsEnabled() {
+        return concurrentSessionsEnabled;
+    }
+
+    public void setConcurrentSessionsEnabled(boolean concurrentSessionsEnabled) {
+        this.concurrentSessionsEnabled = concurrentSessionsEnabled;
+    }
+
+    public boolean isRefreshBindingEnabled() {
+        return refreshBindingEnabled;
+    }
+
+    public void setRefreshBindingEnabled(boolean refreshBindingEnabled) {
+        this.refreshBindingEnabled = refreshBindingEnabled;
+    }
+
+    public boolean isEmailVerificationEnabled() {
+        return emailVerificationEnabled;
+    }
+
+    public void setEmailVerificationEnabled(boolean emailVerificationEnabled) {
+        this.emailVerificationEnabled = emailVerificationEnabled;
+    }
+
+    public String getEmailVerificationBaseUrl() {
+        return emailVerificationBaseUrl;
+    }
+
+    public void setEmailVerificationBaseUrl(String emailVerificationBaseUrl) {
+        this.emailVerificationBaseUrl = emailVerificationBaseUrl;
+    }
+
+    public long getEmailVerificationTokenTtlMs() {
+        return emailVerificationTokenTtlMs;
+    }
+
+    public void setEmailVerificationTokenTtlMs(long emailVerificationTokenTtlMs) {
+        this.emailVerificationTokenTtlMs = emailVerificationTokenTtlMs;
+    }
+
+    public String getEmailVerificationFrom() {
+        return emailVerificationFrom;
+    }
+
+    public void setEmailVerificationFrom(String emailVerificationFrom) {
+        this.emailVerificationFrom = emailVerificationFrom;
+    }
+
+    public boolean isTwoFactorEnabled() {
+        return twoFactorEnabled;
+    }
+
+    public void setTwoFactorEnabled(boolean twoFactorEnabled) {
+        this.twoFactorEnabled = twoFactorEnabled;
+    }
+
+    public String getTwoFactorIssuer() {
+        return twoFactorIssuer;
+    }
+
+    public void setTwoFactorIssuer(String twoFactorIssuer) {
+        this.twoFactorIssuer = twoFactorIssuer;
+    }
+
+    public long getTwoFactorChallengeTtlMs() {
+        return twoFactorChallengeTtlMs;
+    }
+
+    public void setTwoFactorChallengeTtlMs(long twoFactorChallengeTtlMs) {
+        this.twoFactorChallengeTtlMs = twoFactorChallengeTtlMs;
     }
 }

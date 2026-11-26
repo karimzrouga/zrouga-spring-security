@@ -24,6 +24,22 @@ public interface RefreshTokenStore {
     StoredRefreshToken save(long userId, Instant expiryDate);
 
     /**
+     * Enregistre un nouveau refresh token avec binding IP/UA (option
+     * {@code refresh-binding-enabled}). L'implémentation par défaut délègue à
+     * {@link #save(long, Instant)} sans binding — déclarez un store qui le supporte
+     * pour activer la vérification côté serveur.
+     *
+     * @param userId     identifiant du propriétaire
+     * @param expiryDate date d'expiration
+     * @param ip         IP du client, ou {@code null}
+     * @param userAgent  User-Agent du client, ou {@code null}
+     * @return le jeton créé
+     */
+    default StoredRefreshToken save(long userId, Instant expiryDate, String ip, String userAgent) {
+        return save(userId, expiryDate);
+    }
+
+    /**
      * Recherche un jeton par sa valeur brute — y compris s'il est révoqué
      * (la lecture d'un jeton révoqué = détection de réutilisation).
      *

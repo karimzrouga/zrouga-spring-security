@@ -27,7 +27,10 @@ public class TokenControllerAdvice {
 
     @ExceptionHandler({ TokenRefreshException.class, RateLimitException.class, EmailAlreadyUsedException.class,
             SignupNotSupportedException.class, PasswordResetNotSupportedException.class,
-            InvalidResetTokenException.class, AccountLockedException.class, WeakPasswordException.class })
+            InvalidResetTokenException.class, AccountLockedException.class, WeakPasswordException.class,
+            EmailVerificationNotSupportedException.class, InvalidEmailVerificationTokenException.class,
+            TwoFactorNotSupportedException.class, InvalidTwoFactorCodeException.class,
+            TwoFactorTokenException.class, AuthenticationRequiredException.class })
     public ResponseEntity<ApiError> handleAuthException(AuthException ex, WebRequest request) {
         ResponseStatus status = AnnotatedElementUtils.findMergedAnnotation(ex.getClass(), ResponseStatus.class);
         HttpStatus httpStatus = status != null ? status.value() : HttpStatus.INTERNAL_SERVER_ERROR;

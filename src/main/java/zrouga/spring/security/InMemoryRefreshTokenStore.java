@@ -15,11 +15,16 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
 
     @Override
     public StoredRefreshToken save(long userId, Instant expiryDate) {
+        return save(userId, expiryDate, null, null);
+    }
+
+    @Override
+    public StoredRefreshToken save(long userId, Instant expiryDate, String ip, String userAgent) {
         if (tokens.size() > MAX_TRACKED_TOKENS) {
             deleteExpired(Instant.now());
         }
         String raw = UUID.randomUUID().toString();
-        StoredRefreshToken stored = new StoredRefreshToken(raw, userId, expiryDate, false);
+        StoredRefreshToken stored = new StoredRefreshToken(raw, userId, expiryDate, false, ip, userAgent);
         tokens.put(raw, stored);
         return stored;
     }
@@ -39,7 +44,7 @@ public class InMemoryRefreshTokenStore implements RefreshTokenStore {
             return false;
         }
         StoredRefreshToken revoked = new StoredRefreshToken(
-                current.token(), current.userId(), current.expiryDate(), true);
+                current.token(), current.userId(), current.expiryDate(), true, current.ip(), current.userAgent());
         return tokens.replace(token, current, revoked);
     }
 

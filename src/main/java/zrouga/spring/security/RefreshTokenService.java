@@ -20,7 +20,11 @@ public class RefreshTokenService {
     }
 
     public StoredRefreshToken createRefreshToken(long userId) {
-        return refreshTokenStore.save(userId, Instant.now().plusMillis(refreshTokenDurationMs));
+        return createRefreshToken(userId, null, null);
+    }
+
+    public StoredRefreshToken createRefreshToken(long userId, String ip, String userAgent) {
+        return refreshTokenStore.save(userId, Instant.now().plusMillis(refreshTokenDurationMs), ip, userAgent);
     }
 
     public StoredRefreshToken verifyExpiration(StoredRefreshToken token) {

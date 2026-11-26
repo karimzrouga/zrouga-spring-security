@@ -1,14 +1,23 @@
 package zrouga.spring.security.autoconfigure;
 
 import zrouga.spring.security.AccountLockoutService;
+import zrouga.spring.security.AccessTokenRevocation;
+import zrouga.spring.security.AccessTokenRevocationStore;
 import zrouga.spring.security.AuthResource;
 import zrouga.spring.security.AuthService;
 import zrouga.spring.security.AuthUserCreator;
+import zrouga.spring.security.AuthUserEmailVerifier;
 import zrouga.spring.security.AuthUserPasswordUpdater;
 import zrouga.spring.security.AuthUserProvider;
+import zrouga.spring.security.EmailVerificationEmailSender;
+import zrouga.spring.security.EmailVerificationService;
+import zrouga.spring.security.EmailVerificationTokenStore;
+import zrouga.spring.security.InMemoryAccessTokenRevocationStore;
 import zrouga.spring.security.InMemoryAccountLockoutService;
+import zrouga.spring.security.InMemoryEmailVerificationTokenStore;
 import zrouga.spring.security.InMemoryPasswordHistoryStore;
 import zrouga.spring.security.InMemoryPasswordResetTokenStore;
+import zrouga.spring.security.InMemoryTwoFactorSecretStore;
 import zrouga.spring.security.PasswordHistoryStore;
 import zrouga.spring.security.PasswordPolicy;
 import zrouga.spring.security.PasswordResetEmailSender;
@@ -16,7 +25,9 @@ import zrouga.spring.security.PasswordResetService;
 import zrouga.spring.security.PasswordResetTokenStore;
 import zrouga.spring.security.RefreshTokenService;
 import zrouga.spring.security.RefreshTokenStore;
+import zrouga.spring.security.SmtpEmailVerificationEmailSender;
 import zrouga.spring.security.SmtpPasswordResetEmailSender;
+import zrouga.spring.security.TwoFactorSecretStore;
 import zrouga.spring.security.UserDetailsServiceImpl;
 import zrouga.spring.security.ZrougaSecurityProperties;
 import zrouga.spring.security.exception.TokenControllerAdvice;
@@ -34,6 +45,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration;
 import org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -80,8 +92,23 @@ public class ZrougaSecurityAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(AuthTokenFilter.class)
-    public AuthTokenFilter authenticationJwtTokenFilter(JwtUtils jwtUtils) {
-        return new AuthTokenFilter(jwtUtils);
+    public AuthTokenFilter authenticationJwtTokenFilter(JwtUtils jwtUtils,
+            AccessTokenRevocation accessTokenRevocation) {
+        return new AuthTokenFilter(jwtUtils, accessTokenRevocation);
+    }
+
+    /** Store de révocation par défaut en mémoire — déclarez le vôtre (Redis…) pour persister. */
+    @Bean
+    @ConditionalOnMissingBean(AccessTokenRevocationStore.class)
+    public AccessTokenRevocationStore accessTokenRevocationStore() {
+        return new InMemoryAccessTokenRevocationStore();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(AccessTokenRevocation.class)
+    public AccessTokenRevocation accessTokenRevocation(ZrougaSecurityProperties properties,
+            ObjectProvider<AccessTokenRevocationStore> storeProvider) {
+        return new AccessTokenRevocation(properties, storeProvider);
     }
 
     @Bean
@@ -156,16 +183,21 @@ public class ZrougaSecurityAutoConfiguration {
             PasswordEncoder passwordEncoder,
             ObjectProvider<AuthUserCreator> creatorProvider,
             AccountLockoutService accountLockoutService,
-            PasswordPolicy passwordPolicy) {
+            PasswordPolicy passwordPolicy,
+            ZrougaSecurityProperties properties,
+            AccessTokenRevocation accessTokenRevocation,
+            ApplicationEventPublisher eventPublisher,
+            TwoFactorSecretStore twoFactorSecretStore) {
         return new AuthService(authenticationManager, userProvider, jwtUtils, refreshTokenService,
-                loginRateLimiter, passwordEncoder, creatorProvider, accountLockoutService, passwordPolicy);
+                loginRateLimiter, passwordEncoder, creatorProvider, accountLockoutService, passwordPolicy,
+                properties, accessTokenRevocation, eventPublisher, twoFactorSecretStore);
     }
 
     @Bean
     @ConditionalOnMissingBean(AuthResource.class)
     public AuthResource authResource(AuthService authService, PasswordResetService passwordResetService,
-            ZrougaSecurityProperties properties) {
-        return new AuthResource(authService, passwordResetService, properties);
+            EmailVerificationService emailVerificationService, ZrougaSecurityProperties properties) {
+        return new AuthResource(authService, passwordResetService, emailVerificationService, properties);
     }
 
     @Bean
@@ -196,16 +228,54 @@ public class ZrougaSecurityAutoConfiguration {
             LoginRateLimiter loginRateLimiter,
             PasswordEncoder passwordEncoder,
             PasswordPolicy passwordPolicy,
-            PasswordHistoryStore passwordHistoryStore) {
+            PasswordHistoryStore passwordHistoryStore,
+            ApplicationEventPublisher eventPublisher) {
         return new PasswordResetService(properties, userProvider, passwordUpdater, emailSender,
                 passwordResetTokenStore, refreshTokenService, loginRateLimiter, passwordEncoder,
-                passwordPolicy, passwordHistoryStore);
+                passwordPolicy, passwordHistoryStore, eventPublisher);
     }
 
     @Bean
     @ConditionalOnMissingBean(TokenControllerAdvice.class)
     public TokenControllerAdvice tokenControllerAdvice() {
         return new TokenControllerAdvice();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(EmailVerificationTokenStore.class)
+    public EmailVerificationTokenStore emailVerificationTokenStore() {
+        return new InMemoryEmailVerificationTokenStore();
+    }
+
+    /** Secrets TOTP par défaut en mémoire — déclarez le vôtre pour persister/chiffrer. */
+    @Bean
+    @ConditionalOnMissingBean(TwoFactorSecretStore.class)
+    public TwoFactorSecretStore twoFactorSecretStore() {
+        return new InMemoryTwoFactorSecretStore();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(EmailVerificationEmailSender.class)
+    @ConditionalOnProperty(prefix = "zrouga.security", name = "email-verification-enabled", havingValue = "true")
+    public SmtpEmailVerificationEmailSender smtpEmailVerificationEmailSender(
+            ObjectProvider<JavaMailSender> mailSender,
+            ZrougaSecurityProperties properties,
+            ObjectProvider<TaskExecutor> taskExecutor) {
+        return new SmtpEmailVerificationEmailSender(mailSender, properties, taskExecutor);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(EmailVerificationService.class)
+    public EmailVerificationService emailVerificationService(
+            ZrougaSecurityProperties properties,
+            ObjectProvider<AuthUserProvider> userProvider,
+            ObjectProvider<AuthUserEmailVerifier> emailVerifier,
+            ObjectProvider<EmailVerificationEmailSender> emailSender,
+            EmailVerificationTokenStore emailVerificationTokenStore,
+            LoginRateLimiter loginRateLimiter,
+            ApplicationEventPublisher eventPublisher) {
+        return new EmailVerificationService(properties, userProvider, emailVerifier, emailSender,
+                emailVerificationTokenStore, loginRateLimiter, eventPublisher);
     }
 
     /**
@@ -296,8 +366,10 @@ public class ZrougaSecurityAutoConfiguration {
     }
 
     /**
-     * Validation de {@code zrouga.security.auth-mode} : échec explicite au démarrage
-     * sur une valeur inconnue (plutôt qu'un repli silencieux sur le mode header).
+     * Validation de {@code zrouga.security.auth-mode} et
+     * {@code cookie-same-site} : échec explicite au démarrage sur une valeur
+     * inconnue (plutôt qu'un repli silencieux), et {@code None} exige
+     * {@code cookie-secure=true} (exigence des navigateurs modernes).
      */
     @Bean
     public InitializingBean zrougaAuthModeValid(ZrougaSecurityProperties properties) {
@@ -307,6 +379,21 @@ public class ZrougaSecurityAutoConfiguration {
                 throw new IllegalStateException(
                         "zrouga.security.auth-mode doit valoir 'header' ou 'cookie' (valeur actuelle : '"
                                 + mode + "').");
+            }
+
+            String sameSite = properties.getCookieSameSite();
+            boolean known = "Lax".equalsIgnoreCase(sameSite)
+                    || "Strict".equalsIgnoreCase(sameSite)
+                    || "None".equalsIgnoreCase(sameSite);
+            if (!known) {
+                throw new IllegalStateException(
+                        "zrouga.security.cookie-same-site doit valoir 'Lax', 'Strict' ou 'None' (valeur actuelle : '"
+                                + sameSite + "').");
+            }
+            if ("None".equalsIgnoreCase(sameSite) && !properties.isCookieSecure()) {
+                throw new IllegalStateException(
+                        "zrouga.security.cookie-same-site=None exige zrouga.security.cookie-secure=true "
+                                + "(les navigateurs refusent un cookie SameSite=None non sécurisé).");
             }
         };
     }

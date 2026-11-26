@@ -11,6 +11,15 @@ import java.time.Instant;
  * @param expiryDate date d'expiration
  * @param revoked    {@code true} après rotation/révocation — sa lecture = détection de
  *                   réutilisation (vol potentiel)
+ * @param ip         IP du client à la création ({@code null} si binding désactivé ou
+ *                   store personnalisé sans support) — binding optionnel
+ * @param userAgent  User-Agent du client à la création ({@code null} idem)
  */
-public record StoredRefreshToken(String token, long userId, Instant expiryDate, boolean revoked) {
+public record StoredRefreshToken(String token, long userId, Instant expiryDate, boolean revoked, String ip,
+        String userAgent) {
+
+    /** Compatibilité : jeton sans binding IP/UA. */
+    public StoredRefreshToken(String token, long userId, Instant expiryDate, boolean revoked) {
+        this(token, userId, expiryDate, revoked, null, null);
+    }
 }

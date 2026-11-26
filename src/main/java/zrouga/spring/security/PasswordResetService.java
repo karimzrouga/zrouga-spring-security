@@ -8,12 +8,14 @@ import java.util.Optional;
 import zrouga.spring.security.exception.InvalidResetTokenException;
 import zrouga.spring.security.exception.PasswordResetNotSupportedException;
 import zrouga.spring.security.exception.WeakPasswordException;
+import zrouga.spring.security.event.PasswordResetEvent;
 import zrouga.spring.security.payload.ForgotPasswordRequest;
 import zrouga.spring.security.payload.MessageResponse;
 import zrouga.spring.security.payload.ResetPasswordRequest;
 import zrouga.spring.security.ratelimit.LoginRateLimiter;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
@@ -49,6 +51,7 @@ public class PasswordResetService {
     private final PasswordEncoder passwordEncoder;
     private final PasswordPolicy passwordPolicy;
     private final PasswordHistoryStore passwordHistoryStore;
+    private final ApplicationEventPublisher eventPublisher;
 
     public PasswordResetService(
             ZrougaSecurityProperties properties,
@@ -60,7 +63,8 @@ public class PasswordResetService {
             LoginRateLimiter rateLimiter,
             PasswordEncoder passwordEncoder,
             PasswordPolicy passwordPolicy,
-            PasswordHistoryStore passwordHistoryStore) {
+            PasswordHistoryStore passwordHistoryStore,
+            ApplicationEventPublisher eventPublisher) {
         this.properties = properties;
         this.userProvider = userProvider;
         this.passwordUpdater = passwordUpdater;
@@ -71,7 +75,25 @@ public class PasswordResetService {
         this.passwordEncoder = passwordEncoder;
         this.passwordPolicy = passwordPolicy;
         this.passwordHistoryStore = passwordHistoryStore;
+        this.eventPublisher = eventPublisher;
         validateWhenEnabled();
+    }
+
+    @Deprecated
+    public PasswordResetService(
+            ZrougaSecurityProperties properties,
+            ObjectProvider<AuthUserProvider> userProvider,
+            ObjectProvider<AuthUserPasswordUpdater> passwordUpdater,
+            ObjectProvider<PasswordResetEmailSender> emailSender,
+            PasswordResetTokenStore tokenStore,
+            RefreshTokenService refreshTokenService,
+            LoginRateLimiter rateLimiter,
+            PasswordEncoder passwordEncoder,
+            PasswordPolicy passwordPolicy,
+            PasswordHistoryStore passwordHistoryStore) {
+        this(properties, userProvider, passwordUpdater, emailSender, tokenStore,
+                refreshTokenService, rateLimiter, passwordEncoder, passwordPolicy,
+                passwordHistoryStore, event -> { });
     }
 
     /**
@@ -141,6 +163,8 @@ public class PasswordResetService {
             passwordHistoryStore.record(stored.email(), outgoingHash, properties.getPasswordHistoryCount());
         }
         refreshTokenService.deleteByUserId(user.getId());
+
+        eventPublisher.publishEvent(new PasswordResetEvent(stored.email()));
 
         return new MessageResponse("Password has been reset successfully.");
     }

@@ -29,14 +29,22 @@ public class JpaRefreshTokenStore implements RefreshTokenStore {
     @Override
     @Transactional
     public StoredRefreshToken save(long userId, Instant expiryDate) {
+        return save(userId, expiryDate, null, null);
+    }
+
+    @Override
+    @Transactional
+    public StoredRefreshToken save(long userId, Instant expiryDate, String ip, String userAgent) {
         String raw = UUID.randomUUID().toString();
         RefreshTokenEntity entity = new RefreshTokenEntity();
         entity.setUserId(userId);
         entity.setToken(TokenHashing.sha256Hex(raw));
         entity.setExpiryDate(expiryDate);
         entity.setRevoked(false);
+        entity.setIp(ip);
+        entity.setUserAgent(userAgent);
         entityManager.persist(entity);
-        return new StoredRefreshToken(raw, userId, expiryDate, false);
+        return new StoredRefreshToken(raw, userId, expiryDate, false, ip, userAgent);
     }
 
     @Override
@@ -53,7 +61,7 @@ public class JpaRefreshTokenStore implements RefreshTokenStore {
         return results.stream()
                 .findFirst()
                 .map(entity -> new StoredRefreshToken(token, entity.getUserId(), entity.getExpiryDate(),
-                        entity.isRevoked()));
+                        entity.isRevoked(), entity.getIp(), entity.getUserAgent()));
     }
 
     @Override

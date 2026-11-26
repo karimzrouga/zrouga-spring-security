@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 
+import zrouga.spring.security.AccessTokenRevocation;
 import zrouga.spring.security.AuthCookies;
 import zrouga.spring.security.UserDetailsImpl;
 
@@ -27,9 +28,16 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     private static final Logger logger = LoggerFactory.getLogger(AuthTokenFilter.class);
 
     private final JwtUtils jwtUtils;
+    private final AccessTokenRevocation accessTokenRevocation;
 
     public AuthTokenFilter(JwtUtils jwtUtils) {
+        this(jwtUtils, AccessTokenRevocation.disabled());
+    }
+
+    public AuthTokenFilter(JwtUtils jwtUtils, AccessTokenRevocation accessTokenRevocation) {
         this.jwtUtils = jwtUtils;
+        this.accessTokenRevocation = accessTokenRevocation != null ? accessTokenRevocation
+                : AccessTokenRevocation.disabled();
     }
 
     @Override
@@ -40,9 +48,15 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             if (jwt != null) {
                 Claims claims = jwtUtils.parseClaims(jwt);
                 if (claims != null) {
-                    Authentication authentication = buildAuthentication(claims, request);
-                    if (authentication != null) {
-                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                    // Révocation (revocation-enabled) : jti sur liste noire = jeton
+                    // révoqué (signout) — refusé même s'il n'est pas encore expiré.
+                    if (accessTokenRevocation.isRevoked(claims.getId())) {
+                        logger.debug("Access token révoqué (jti={}): authentification refusée", claims.getId());
+                    } else {
+                        Authentication authentication = buildAuthentication(claims, request);
+                        if (authentication != null) {
+                            SecurityContextHolder.getContext().setAuthentication(authentication);
+                        }
                     }
                 }
             }
