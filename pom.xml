@@ -10,7 +10,7 @@
     </parent>
     <groupId>zrouga.spring</groupId>
     <artifactId>security-starter</artifactId>
-    <version>2.1.0</version>
+    <version>2.2.0</version>
     <name>zrouga-spring-security-starter</name>
     <description>Starter Spring Security personnalisé : JWT, refresh token, AuthUser/AuthUserProvider</description>
     <url>https://github.com/karimzrouga/zrouga-spring-security</url>
@@ -22,9 +22,25 @@
         </license>
     </licenses>
 
+    <scm>
+        <connection>scm:git:https://github.com/karimzrouga/zrouga-spring-security.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/karimzrouga/zrouga-spring-security.git</developerConnection>
+        <url>https://github.com/karimzrouga/zrouga-spring-security</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <developers>
+        <developer>
+            <name>Karim Zrouga</name>
+            <url>https://github.com/karimzrouga</url>
+        </developer>
+    </developers>
+
     <properties>
         <java.version>21</java.version>
         <jjwt.version>0.13.0</jjwt.version>
+        <!-- Version précédente comparée par japicmp (bumpée à chaque release) -->
+        <japicmp.oldVersion>2.1.0</japicmp.oldVersion>
     </properties>
 
     <dependencies>
@@ -49,6 +65,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-mail</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
             <optional>true</optional>
         </dependency>
         <dependency>
@@ -88,6 +109,21 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -183,6 +219,43 @@
                         <id>attach-javadocs</id>
                         <goals>
                             <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.github.siom79.japicmp</groupId>
+                <artifactId>japicmp-maven-plugin</artifactId>
+                <version>0.27.0</version>
+                <configuration>
+                    <oldVersion>
+                        <dependency>
+                            <groupId>${project.groupId}</groupId>
+                            <artifactId>${project.artifactId}</artifactId>
+                            <version>${japicmp.oldVersion}</version>
+                            <type>jar</type>
+                        </dependency>
+                    </oldVersion>
+                    <newVersion>
+                        <file>
+                            <path>${project.build.directory}/${project.artifactId}-${project.version}.${project.packaging}</path>
+                        </file>
+                    </newVersion>
+                    <breakBuildOnBinaryIncompatibleModifications>true</breakBuildOnBinaryIncompatibleModifications>
+                    <parameter>
+                        <onlyModified>true</onlyModified>
+                        <excludes>
+                            <exclude>zrouga.spring.security.autoconfigure.ZrougaSecurityAutoConfiguration</exclude>
+                        </excludes>
+                        <ignoreMissingOldVersion>true</ignoreMissingOldVersion>
+                        <breakBuildOnBinaryIncompatibleModifications>true</breakBuildOnBinaryIncompatibleModifications>
+                    </parameter>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>cmp</goal>
                         </goals>
                     </execution>
                 </executions>

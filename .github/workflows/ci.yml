@@ -17,6 +17,15 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Construction de la release precedente (japicmp)
+        run: |
+          chmod +x mvnw
+          OLD=$(sed -n 's:.*<japicmp\.oldVersion>\([^<]*\)</japicmp\.oldVersion>.*:\1:p' pom.xml)
+          git fetch --force --tags origin
+          git worktree add "$RUNNER_TEMP/prev" "v$OLD"
+          chmod +x "$RUNNER_TEMP/prev/mvnw"
+          cd "$RUNNER_TEMP/prev"
+          ./mvnw -B --no-transfer-progress -Dmaven.test.skip=true -Djacoco.skip=true -Dmaven.javadoc.skip=true install
       - name: Build et tests
         run: |
           chmod +x mvnw
@@ -27,7 +36,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - uses: actions/checkout@v4
@@ -42,3 +51,12 @@ jobs:
           ./mvnw -B --no-transfer-progress deploy -DskipTests
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Release GitHub avec notes automatiques
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME deja existante"
+          else
+            gh release create "$GITHUB_REF_NAME" --generate-notes --title "$GITHUB_REF_NAME"
+          fi
