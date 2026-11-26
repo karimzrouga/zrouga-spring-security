@@ -18,7 +18,7 @@
         <java.version>21</java.version>
         <zrouga.security.version>2.2.0</zrouga.security.version>
         <!-- 3.2.0 = ligne springdoc pour Spring Boot 4.1.x (construit sur 4.1.2) -->
-        <springdoc.version>3.2.0</springdoc.version>
+        <springdoc.version>3.2.1</springdoc.version>
     </properties>
 
     <dependencies>
