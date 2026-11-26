@@ -1,12 +1,21 @@
 # zrouga-spring-security-starter
 
-Starter Spring Security **générique et autonome** : JWT (HS512), refresh token avec rotation, rate-limiting sur la connexion, verrouillage de compte et politique de mot de passe (**optionnels**), abstraction `AuthUser` / `AuthUserProvider`, rôles illimités, inscription, réinitialisation du mot de passe par e-mail SMTP (**optionnelle**). Réutilisable dans n'importe quel projet Spring Boot 4 / Java 21 .
+**English** | [Français](README.fr.md)
 
-- Coordonnées : `zrouga.spring:security-starter:2.1.0` (voir `CHANGELOG.md` pour les ruptures)
-- Auto-configuré via `AutoConfiguration.imports` : rien à importer, l'ajout de la dépendance suffit.
-- Licence : MIT.
+[![CI](https://github.com/karimzrouga/zrouga-spring-security/actions/workflows/ci.yml/badge.svg)](https://github.com/karimzrouga/zrouga-spring-security/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/karimzrouga/zrouga-spring-security/actions/workflows/codeql.yml/badge.svg)](https://github.com/karimzrouga/zrouga-spring-security/actions/workflows/codeql.yml)
+[![Release](https://img.shields.io/github/v/release/karimzrouga/zrouga-spring-security)](https://github.com/karimzrouga/zrouga-spring-security/releases)
+[![Java 21](https://img.shields.io/badge/Java-21-blue)](https://openjdk.org/projects/jdk/21/)
+[![Spring Boot 4.1](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](https://spring.io/projects/spring-boot)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 1. Dépendance (projet consommateur)
+Generic, self-contained Spring Security starter: JWT (HS512), refresh token with rotation, sign-in rate limiting, account lockout and password policy (**optional**), `AuthUser` / `AuthUserProvider` abstraction, unlimited roles, sign-up, e-mail password reset (**optional**), **e-mail verification** and **TOTP two-factor authentication** (**optional**), **events, Micrometer metrics and a health indicator**. Reusable in any Spring Boot 4 / Java 21 project.
+
+- Coordinates: `zrouga.spring:security-starter:2.2.0` (see `CHANGELOG.md` for breaking changes)
+- Auto-configured via `AutoConfiguration.imports`: nothing to import, adding the dependency is enough.
+- License: MIT.
+
+## 1. Dependency (consumer project)
 
 ```xml
 <repositories>
@@ -17,7 +26,7 @@ Starter Spring Security **générique et autonome** : JWT (HS512), refresh token
 </repositories>
 
 <dependencies>
-    <!-- spring-boot-starter-web est OPTIONNEL dans le starter : à déclarer ici -->
+    <!-- spring-boot-starter-web is OPTIONAL in the starter: declare it here -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
@@ -25,19 +34,19 @@ Starter Spring Security **générique et autonome** : JWT (HS512), refresh token
     <dependency>
         <groupId>zrouga.spring</groupId>
         <artifactId>security-starter</artifactId>
-        <version>2.1.0</version>
+        <version>2.2.0</version>
     </dependency>
 </dependencies>
 ```
 
-GitHub Packages exige une authentification même en lecture : ajoutez dans `~/.m2/settings.xml`
+GitHub Packages requires authentication even for reads: add to `~/.m2/settings.xml`
 
 ```xml
 <servers>
     <server>
         <id>github</id>
-        <username>VOTRE_GITHUB_LOGIN</username>
-        <password>VOTRE_PAT_READ_PACKAGES</password>
+        <username>YOUR_GITHUB_LOGIN</username>
+        <password>YOUR_PAT_READ_PACKAGES</password>
     </server>
 </servers>
 ```
@@ -47,46 +56,56 @@ GitHub Packages exige une authentification même en lecture : ajoutez dans `~/.m
 ```yaml
 zrouga:
   security:
-    jwt-secret: <base64, >= 64 octets décodés>      # obligatoire
-    jwt-expiration-ms: 1800000                       # défaut : 30 min
-    jwt-refresh-expiration-ms: 86400000              # défaut : 24 h
-    auth-mode: header                                # défaut : header | cookie (§11)
-    cookie-secure: false                             # drapeau Secure des cookies d'auth (true en HTTPS)
-    cookie-same-site: Lax                            # SameSite des cookies : Lax | Strict | None
-    public-paths:                                    # défaut : /api/auth/**
+    jwt-secret: <base64, >= 64 decoded bytes>        # required
+    jwt-expiration-ms: 1800000                       # default: 30 min
+    jwt-refresh-expiration-ms: 86400000              # default: 24 h
+    auth-mode: header                                # default: header | cookie (§11)
+    cookie-secure: false                             # Secure flag on auth cookies (true over HTTPS)
+    cookie-same-site: Lax                            # SameSite of cookies: Lax | Strict | None
+    public-paths:                                    # default: /api/auth/**
       - /api/auth/**
-    rate-limit-max-attempts: 5                       # défaut : 5 échecs puis 429
-    rate-limit-window-ms: 900000                     # défaut : fenêtre de 15 min
-    lockout-enabled: false                           # défaut : verrouillage de compte DÉSACTIVÉ
-    lockout-max-attempts: 5                          # défaut : 5 échecs puis 423
-    lockout-duration-ms: 900000                      # défaut : verrou de 15 min
-    password-policy-enabled: false                   # défaut : politique de mot de passe DÉSACTIVÉE
-    password-min-length: 8                           # défaut : longueur minimale
-    password-require-uppercase: true                 # défaut : majuscule exigée
-    password-require-lowercase: true                 # défaut : minuscule exigée
-    password-require-digit: true                     # défaut : chiffre exigé
-    password-require-special: true                   # défaut : caractère spécial exigé
-    password-history-count: 3                        # défaut : 3 anciens mots de passe refusés
-    trust-forwarded-for: false                       # défaut : X-Forwarded-For ignoré (true derrière un proxy)
-    cleanup-enabled: false                           # défaut : purge des refresh tokens expirés désactivée
-    cleanup-fixed-delay-ms: 3600000                  # défaut : purge toutes les 1 h
-    reset-enabled: false                             # défaut : réinitialisation SMTP DÉSACTIVÉE
-    reset-base-url: ""                               # obligatoire si reset-enabled=true (URL front)
-    reset-token-expiration-ms: 900000                # défaut : jeton valable 15 min
-    reset-email-from: ""                             # défaut : spring.mail.username
+    rate-limit-max-attempts: 5                       # default: 5 failures then 429
+    rate-limit-window-ms: 900000                     # default: 15 min window
+    lockout-enabled: false                           # default: account lockout DISABLED
+    lockout-max-attempts: 5                          # default: 5 failures then 423
+    lockout-duration-ms: 900000                      # default: 15 min lock
+    password-policy-enabled: false                   # default: password policy DISABLED
+    password-min-length: 8                           # default: minimum length
+    password-require-uppercase: true                 # default: uppercase required
+    password-require-lowercase: true                 # default: lowercase required
+    password-require-digit: true                     # default: digit required
+    password-require-special: true                   # default: special character required
+    password-history-count: 3                        # default: last 3 passwords rejected
+    revocation-enabled: false                        # default: jti revocation DISABLED (§10)
+    concurrent-sessions-enabled: false               # default: single session (a sign-in purges tokens)
+    refresh-binding-enabled: false                   # default: IP/UA binding DISABLED (§10)
+    trust-forwarded-for: false                       # default: X-Forwarded-For ignored (true behind a proxy)
+    cleanup-enabled: false                           # default: expired refresh token purge DISABLED
+    cleanup-fixed-delay-ms: 3600000                  # default: purge every 1 h
+    reset-enabled: false                             # default: SMTP password reset DISABLED
+    reset-base-url: ""                               # required if reset-enabled=true (front URL)
+    reset-token-expiration-ms: 900000                # default: token valid 15 min
+    reset-email-from: ""                             # default: spring.mail.username
+    email-verification-enabled: false                # default: e-mail verification DISABLED (§16)
+    email-verification-base-url: ""                  # required if enabled (front URL)
+    email-verification-token-ttl-ms: 86400000        # default: token valid 24 h
+    email-verification-from: ""                      # default: spring.mail.username
+    two-factor-enabled: false                        # default: TOTP 2FA DISABLED (§17)
+    two-factor-issuer: zrouga                        # default: "zrouga" (in otpauth://)
+    two-factor-challenge-ttl-ms: 300000              # default: challenge valid 5 min
 ```
 
-Le secret doit être un **Base64 standard valide** (A-Z, a-z, 0-9, +, /, =) décodant à **au moins 64 octets (512 bits)** — exigence HS512, vérifiée au démarrage. Génération : `openssl rand -base64 64`.
+The secret must be a **valid standard Base64** (A-Z, a-z, 0-9, +, /, =) decoding to **at least 64 bytes (512 bits)** — an HS512 requirement, checked at startup. Generation: `openssl rand -base64 64`.
 
-## 3. Implémenter le pont vers votre projet (obligatoire)
+## 3. Implement the bridge to your project (mandatory)
 
-Vous implémentez `AuthUser` (vos utilisateurs) et `AuthUserProvider` (leur accès) :
+Implement `AuthUser` (your users) and `AuthUserProvider` (their access):
 
 ```java
 @Component
-public class MonAuthUserProvider implements AuthUserProvider {
+public class MyAuthUserProvider implements AuthUserProvider {
 
-    private final UtilisateurRepository repository; // votre entité / votre table
+    private final UserRepository repository; // your entity / your table
 
     @Override
     public Optional<AuthUser> findByEmail(String email) {
@@ -98,190 +117,203 @@ public class MonAuthUserProvider implements AuthUserProvider {
         return repository.findById(id).map(this::toAuthUser);
     }
 
-    private AuthUser toAuthUser(Utilisateur u) {
+    private AuthUser toAuthUser(User u) {
         return new AuthUser() {
             public Long getId() { return u.getId(); }
             public String getEmail() { return u.getEmail(); }
             public String getPassword() { return u.getPassword(); }        // hash
-            public List<String> getRoles() { return List.of(u.getRole().name()); } // illimités
-            public Boolean getStatus() { return u.getActif(); }            // false = compte désactivé
+            public List<String> getRoles() { return List.of(u.getRole().name()); } // unlimited
+            public Boolean getStatus() { return u.getActive(); }           // false = disabled account
         };
     }
 }
 ```
 
-Sans bean `AuthUserProvider`, le démarrage échoue avec un message explicite.
+Without an `AuthUserProvider` bean, startup fails with an explicit message.
 
-Pour activer l'inscription (`/api/auth/signup`), déclarez en plus un bean `AuthUserCreator` — voir §5.
+To enable sign-up (`/api/auth/signup`), also declare an `AuthUserCreator` bean — see §5.
 
-## 4. Endpoints exposés
+## 4. Exposed endpoints
 
-| Méthode | Chemin | Corps / réponse |
+| Method | Path | Body / response |
 |---|---|---|
 | POST | `/api/auth/signup` | `{email, password}` → `{message}` (**201**) |
-| POST | `/api/auth/signin` | `{email, password}` → `{token, type: "Bearer", refreshToken}` |
-| POST | `/api/auth/forgot-password` | `{email}` → `{message}` (**200**, toujours identique — si `reset-enabled`) |
-| POST | `/api/auth/reset-password` | `{token, password}` → `{message}` (**200** — si `reset-enabled`) |
-| POST | `/api/auth/refreshtoken` | `{refreshToken}` → `{accessToken, refreshToken, tokenType: "Bearer"}` (**refreshToken tourné**) |
+| POST | `/api/auth/signin` | `{email, password}` → `{token, type: "Bearer", refreshToken}` (or 2FA challenge, §17) |
+| POST | `/api/auth/forgot-password` | `{email}` → `{message}` (**200**, always identical — if `reset-enabled`) |
+| POST | `/api/auth/reset-password` | `{token, password}` → `{message}` (**200** — if `reset-enabled`) |
+| POST | `/api/auth/refreshtoken` | `{refreshToken}` → `{accessToken, refreshToken, tokenType: "Bearer"}` (**refreshToken rotated**) |
 | POST | `/api/auth/signout` | (Bearer) → `{message}` |
+| POST | `/api/auth/verify-email` | `{token}` → `{message}` (**if `email-verification-enabled`**, §16) |
+| POST | `/api/auth/resend-verification` | `{email}` → `{message}` (**always identical** — anti-enumeration) |
+| POST | `/api/auth/2fa/setup` | (Bearer) → `{secret, otpauthUri}` (§17) |
+| POST | `/api/auth/2fa/enable` | (Bearer) `{code}` → `{message}` (§17) |
+| POST | `/api/auth/2fa/disable` | (Bearer) `{code}` → `{message}` (§17) |
+| POST | `/api/auth/2fa/verify` | `{twoFactorToken, code}` → full tokens (§17) |
 
-En mode `cookie` (§11) : `/signin` et `/refreshtoken` posent en plus les cookies d'auth
-(réponse JSON identique), `/refreshtoken` accepte un corps vide (la cookie
-`zrouga_refresh` est lue automatiquement) et `/signout` vide les cookies.
+In `cookie` mode (§11): `/signin` and `/refreshtoken` also set the auth cookies (JSON body
+unchanged), `/refreshtoken` accepts an empty body (the `zrouga_refresh` cookie is read
+automatically) and `/signout` clears the cookies.
 
-### Erreurs — format unifié
+### Errors — unified format
 
-Toutes les erreurs du starter (400, 401, 403, 409, 423, 429, 501) ont la forme :
+All starter errors (400, 401, 403, 409, 423, 429, 501) look like:
 
 ```json
 { "status": 403, "error": "Forbidden", "message": "...", "path": "/api/auth/refreshtoken", "timestamp": "2026-11-22T12:00:00Z" }
 ```
 
-| Cas | Statut |
+| Case | Status |
 |---|---|
-| JWT absent / invalide / compte inactif / mauvais mot de passe | 401 |
-| Refresh token inconnu, expiré ou déjà tourné | 403 |
-| E-mail déjà utilisé lors d'une inscription | 409 |
-| Jeton de réinitialisation invalide, expiré ou déjà utilisé | 400 |
-| Trop de tentatives de connexion (`rate-limit-max-attempts`) | 429 |
-| Compte verrouillé après N échecs (`lockout-max-attempts`) — code `account_locked` | 423 |
-| Mot de passe refusé par la politique (`password-policy-enabled`) — code `weak_password` | 400 |
-| Corps de requête invalide (validation `@Valid`) | 400 |
-| Inscription sans bean `AuthUserCreator` déclaré | 501 |
-| Réinitialisation désactivée (`reset-enabled=false`) | 501 |
+| Missing / invalid JWT, inactive account, wrong password | 401 |
+| Unknown, expired or already-rotated refresh token | 403 |
+| Refresh token whose IP/UA binding no longer matches (`refresh-binding-enabled`) | 403 |
+| E-mail already used at sign-up | 409 |
+| Invalid, expired or reused password-reset token | 400 |
+| Invalid, expired or reused e-mail verification token | 400 `verification_token_invalid` |
+| Too many sign-in attempts (`rate-limit-max-attempts`) | 429 |
+| Account locked after N failures (`lockout-max-attempts`) — code `account_locked` | 423 |
+| Password rejected by policy (`password-policy-enabled`) — code `weak_password` | 400 |
+| Invalid request body (`@Valid` validation) | 400 |
+| Sign-up without an `AuthUserCreator` bean | 501 `signup_not_supported` |
+| Reset disabled (`reset-enabled=false`) | 501 `reset_not_supported` |
+| E-mail verification disabled (`email-verification-enabled=false`) | 501 `verification_not_supported` |
+| 2FA disabled (`two-factor-enabled=false`) on `/2fa/*` | 501 `two_factor_not_supported` |
+| Invalid TOTP code | 400 `invalid_two_factor_code` |
+| Missing or expired 2FA challenge (`/2fa/verify`) | 401 `two_factor_token_invalid` |
 
-Le message d'erreur ne contient **jamais** la valeur du refresh token.
+Error messages **never** contain the refresh token value.
 
-Tout le reste de l'API est `authenticated()` sauf `public-paths`.
+Everything else in the API is `authenticated()` except `public-paths`.
 
-## 5. Inscription — `POST /api/auth/signup`
+## 5. Sign-up — `POST /api/auth/signup`
 
-Corps : `{"email": "...", "password": "..."}` — mot de passe de **8 à 128 caractères**, e-mail valide.
-Réponse `201` : `{"message": "User registered successfully!"}` puis connectez-vous via `/signin`.
-Avec `password-policy-enabled=true`, le mot de passe doit en plus satisfaire la politique (§13) → `400 weak_password`.
+Body: `{"email": "...", "password": "..."}` — password of **8 to 128 characters**, valid e-mail.
+`201` response: `{"message": "User registered successfully!"}` then sign in via `/signin`.
+With `password-policy-enabled=true`, the password must also satisfy the policy (§13) → `400 weak_password`.
 
-L'inscription est **publique** (couverte par `public-paths` = `/api/auth/**`). Pour l'activer, déclarez un bean `AuthUserCreator` — c'est votre projet qui crée réellement l'utilisateur :
+Sign-up is **public** (covered by `public-paths` = `/api/auth/**`). To enable it, declare an
+`AuthUserCreator` bean — your project actually creates the user:
 
 ```java
 @Component
-public class MonAuthUserCreator implements AuthUserCreator {
+public class MyAuthUserCreator implements AuthUserCreator {
 
-    private final UtilisateurRepository repository; // votre entité / votre table
+    private final UserRepository repository; // your entity / your table
 
     @Override
     public void create(String email, String encodedPassword) {
-        Utilisateur u = new Utilisateur();
+        User u = new User();
         u.setEmail(email);
-        u.setPassword(encodedPassword);   // hash BCrypt déjà produit par le starter
-        u.setRole(Role.USER);             // ← les rôles sont DÉCIDÉS ICI
-        u.setActif(true);
+        u.setPassword(encodedPassword);   // BCrypt hash already produced by the starter
+        u.setRole(Role.USER);             // ← roles are DECIDED HERE
+        u.setActive(true);
         repository.save(u);
     }
 }
 ```
 
-> **Les rôles ne viennent jamais du client** : le corps de signup ne contient que `email` et `password`.
-> C'est `AuthUserCreator` qui attribue le rôle (rôle par défaut, validation manuelle, …) — sinon un
-> nouvel utilisateur pourrait s'auto-élever en `ADMIN`.
+> **Roles never come from the client**: the sign-up body only contains `email` and `password`.
+> `AuthUserCreator` assigns the role (default role, manual validation, …) — otherwise a new
+> user could self-elevate to `ADMIN`.
 
-| Cas | Statut |
+| Case | Status |
 |---|---|
-| Inscription réussie | 201 |
-| E-mail déjà utilisé | 409 |
-| Aucun bean `AuthUserCreator` déclaré | 501 (message : « declarez un bean AuthUserCreator… ») |
-| Corps invalide (e-mail, mot de passe < 8 caractères) | 400 |
-| Mot de passe refusé par la politique (§13) — `weak_password` | 400 |
-| Trop d'inscriptions ratées pour le même e-mail (rate-limit) | 429 |
+| Sign-up succeeded | 201 |
+| E-mail already used | 409 |
+| No `AuthUserCreator` bean declared | 501 (message: "declare an AuthUserCreator bean…") |
+| Invalid body (e-mail, password < 8 chars) | 400 |
+| Password rejected by policy (§13) — `weak_password` | 400 |
+| Too many failed sign-ups for the same e-mail (rate limit) | 429 |
 
-## 6. Réinitialisation du mot de passe (optionnelle — SMTP)
+## 6. Password reset (optional — SMTP)
 
-**Désactivée par défaut** — activez-la uniquement si vous en avez besoin :
+**Disabled by default** — enable it only if you need it:
 
 ```yaml
 zrouga:
   security:
-    reset-enabled: true                              # active la fonctionnalité
-    reset-base-url: https://mon-front.test/reset     # obligatoire (page front)
-    reset-token-expiration-ms: 900000                # défaut : jeton 15 min
-    reset-email-from: no-reply@mon-projet.test       # défaut : spring.mail.username
+    reset-enabled: true                              # enables the feature
+    reset-base-url: https://my-front.test/reset      # required (front page)
+    reset-token-expiration-ms: 900000                # default: token valid 15 min
+    reset-email-from: no-reply@my-project.test       # default: spring.mail.username
 spring:
-  mail:                                              # SMTP — dépendance spring-boot-starter-mail
+  mail:                                              # SMTP — requires spring-boot-starter-mail
     host: smtp.example.test
     port: 587
-    username: user@mon-projet.test
+    username: user@my-project.test
     password: ***
 ```
 
-Au démarrage avec `reset-enabled=true`, le starter **échoue avec un message explicite** si
-`reset-base-url`, le bean `AuthUserPasswordUpdater` ou le `JavaMailSender` (`spring.mail.*`)
-manque. Sans `reset-enabled`, aucune exigence — les deux endpoints répondent 501.
+At startup with `reset-enabled=true`, the starter **fails with an explicit message** if
+`reset-base-url`, the `AuthUserPasswordUpdater` bean or the `JavaMailSender` (`spring.mail.*`)
+is missing. Without `reset-enabled`, no requirements — both endpoints answer 501.
 
-### SPI obligatoire — `AuthUserPasswordUpdater`
+### Mandatory SPI — `AuthUserPasswordUpdater`
 
 ```java
 @Component
-public class MonPasswordUpdater implements AuthUserPasswordUpdater {
+public class MyPasswordUpdater implements AuthUserPasswordUpdater {
 
-    private final UtilisateurRepository repository; // votre entité / votre table
+    private final UserRepository repository; // your entity / your table
 
     @Override
     public void updatePassword(String email, String encodedPassword) {
-        Utilisateur u = repository.findByEmail(email).orElseThrow();
-        u.setPassword(encodedPassword);   // hash BCrypt déjà produit par le starter
+        User u = repository.findByEmail(email).orElseThrow();
+        u.setPassword(encodedPassword);   // BCrypt hash already produced by the starter
         repository.save(u);
     }
 }
 ```
 
-### Flux
+### Flow
 
-| Étape | Appel | Réponse |
+| Step | Call | Response |
 |---|---|---|
-| 1. Demande | `POST /api/auth/forgot-password` `{email}` | **200** toujours identique (anti-énumération) — l'e-mail part seulement si le compte existe |
-| 2. Lien | e-mail SMTP : `{reset-base-url}?token=…` | jeton aléatoire 256 bits, valable 15 min, **usage unique** |
-| 3. Nouveau mot de passe | `POST /api/auth/reset-password` `{token, password}` | **200** — hash enregistré + **tous les refresh tokens du compte révoqués** |
+| 1. Request | `POST /api/auth/forgot-password` `{email}` | **200** always identical (anti-enumeration) — the e-mail is only sent if the account exists |
+| 2. Link | SMTP e-mail: `{reset-base-url}?token=…` | random 256-bit token, valid 15 min, **single use** |
+| 3. New password | `POST /api/auth/reset-password` `{token, password}` | **200** — hash stored + **all refresh tokens of the account revoked** |
 
-- **Rate-limit** : 5 demandes / 15 min par e-mail (compte connu ou non — pas d'énumération par 429).
-- Jeton invalide, expiré ou déjà utilisé → **400** `Invalid or expired reset token.` (même message partout).
-- **Politique de mot de passe** (§13, si `password-policy-enabled=true`) : le nouveau mot de passe est
-  validé **avant** la consommation du jeton — un refus (`400 weak_password`) laisse le jeton utilisable.
-- **SMTP par défaut** (`SmtpPasswordResetEmailSender`) ; personnalisez avec votre propre bean
-  `PasswordResetEmailSender` (SendGrid, API métier, console de dev…) — `spring.mail.*` n'est alors
-  pas requis.
-- Stockage en mémoire par défaut ; déclarez `PasswordResetTokenStore` pour une persistance
-  distribuée (Redis, table SQL).
+- **Rate limit**: 5 requests / 15 min per e-mail (known account or not — no enumeration via 429).
+- Invalid, expired or reused token → **400** `Invalid or expired reset token.` (same message everywhere).
+- **Password policy** (§13, if `password-policy-enabled=true`): the new password is validated
+  **before** the token is consumed — a rejection (`400 weak_password`) leaves the token usable.
+- **SMTP by default** (`SmtpPasswordResetEmailSender`); customize with your own
+  `PasswordResetEmailSender` bean (SendGrid, business API, dev console…) — `spring.mail.*` is
+  then not required.
+- In-memory storage by default; declare `PasswordResetTokenStore` for distributed persistence
+  (Redis, SQL table).
 
-## 7. Autorisation par rôle — API non publiques
+## 7. Role-based authorization — non-public APIs
 
-Modèle par défaut : `public-paths` (défaut `/api/auth/**`) → `permitAll()` ; **tout le reste** →
-`authenticated()` (JWT valide + compte actif). Pour exiger **en plus** un rôle sur une route non
-publique, deux approches :
+Default model: `public-paths` (default `/api/auth/**`) → `permitAll()`; **everything else** →
+`authenticated()` (valid JWT + active account). To additionally require a role on a non-public
+route, two approaches:
 
-### Déclarer un endpoint PUBLIC ou PRIVÉ
+### Declare a PUBLIC or PRIVATE endpoint
 
-**Public** (sans jeton) = déclaré dans `zrouga.security.public-paths` — **privé** = tout le reste, automatiquement.
+**Public** (no token) = declared in `zrouga.security.public-paths` — **private** = everything else, automatically.
 
 ```yaml
 zrouga:
   security:
-    public-paths:                # ← seuls ces chemins sont PUBLICS
-      - /api/auth/**             # défaut : signup, signin, refreshtoken, signout
-      - /api/public/**           # ex : ressources ouvertes
-      - /health                  # ex : chemin exact
+    public-paths:                # ← only these paths are PUBLIC
+      - /api/auth/**             # default: signup, signin, refreshtoken, signout, 2fa, verify-email
+      - /api/public/**           # ex: open resources
+      - /health                  # ex: exact path
 ```
 
-| Déclaration | Endpoint privé (défaut) | Endpoint public | Endpoint privé + rôle |
+| Declaration | Private endpoint (default) | Public endpoint | Private + role |
 |---|---|---|---|
-| **Où** | rien à faire — hors `public-paths` | `public-paths` (YAML) | `@PreAuthorize` ou `SecurityFilterChain` |
-| **Exigence** | JWT valide + compte actif → sinon **401** | aucune | rôle absent → **403** |
-| **Exemple** | `GET /api/hello` | `POST /api/auth/signup` | `GET /api/admin/stats` |
+| **Where** | nothing to do — outside `public-paths` | `public-paths` (YAML) | `@PreAuthorize` or `SecurityFilterChain` |
+| **Requirement** | valid JWT + active account → else **401** | none | missing role → **403** |
+| **Example** | `GET /api/hello` | `POST /api/auth/signup` | `GET /api/admin/stats` |
 
-- Motifs Spring : `*` = un segment, `**` = plusieurs segments, sans joker = chemin exact.
-- La liste YAML **remplace** le défaut : répétez `/api/auth/**` si vous ajoutez d'autres chemins.
-- Attention : plus une liste est large (`/**`), plus d'endpoints échappent à l'authentification —
-  déclarez strictement ce qui doit l'être.
+- Spring patterns: `*` = one segment, `**` = several segments, no wildcard = exact path.
+- The YAML list **replaces** the default: repeat `/api/auth/**` if you add other paths.
+- Careful: the wider the list (`/**`), the more endpoints escape authentication —
+  declare strictly what must be.
 
-### a) Par annotation (recommandé — `@EnableMethodSecurity` déjà actif)
+### a) By annotation (recommended — `@EnableMethodSecurity` already active)
 
 ```java
 @RestController
@@ -290,19 +322,19 @@ public class AdminResource {
 
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/stats")
-    public Stats stats() { ... }                 // 403 si rôle ADMIN absent
+    public Stats stats() { ... }                 // 403 if ADMIN role missing
 
     @PreAuthorize("hasAnyRole('ADMIN', 'AQP')")
-    @GetMapping("/rapports")
-    public List<Rapport> rapports() { ... }      // 403 si ni ADMIN ni AQP
+    @GetMapping("/reports")
+    public List<Report> reports() { ... }        // 403 if neither ADMIN nor AQP
 }
 ```
 
-Sur une classe entière : placez `@PreAuthorize("hasRole('ADMIN')")` au-dessus de `public class …`.
+On a whole class: put `@PreAuthorize("hasRole('ADMIN')")` above `public class …`.
 
-### b) Par route (déclarez votre propre `SecurityFilterChain`)
+### b) By route (declare your own `SecurityFilterChain`)
 
-Votre bean remplace celui du starter (`@ConditionalOnMissingBean`) :
+Your bean replaces the starter's (`@ConditionalOnMissingBean`):
 
 ```java
 @Bean
@@ -311,178 +343,383 @@ SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
             .requestMatchers("/api/auth/**").permitAll()            // public
-            .requestMatchers("/api/admin/**").hasRole("ADMIN")      // rôle exigé
-            .requestMatchers("/api/controle/**").hasAnyRole("ADMIN", "AQP")
-            .anyRequest().authenticated())                           // le reste : jeton valide
+            .requestMatchers("/api/admin/**").hasRole("ADMIN")      // role required
+            .requestMatchers("/api/control/**").hasAnyRole("ADMIN", "AQP")
+            .anyRequest().authenticated())                           // rest: valid token
         .exceptionHandling(e -> e.authenticationEntryPoint(unauthorizedHandler))
         .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
     return http.build();
 }
 ```
 
-### Bonnes pratiques
+### Best practices
 
-- **`hasRole('X')` sans préfixe** : les claims JWT portent `ADMIN` (sans `ROLE_`) et le préfixe est
-  ajouté automatiquement à la construction des autorités — écrivez `hasRole("ADMIN")`, **jamais**
-  `hasRole("ROLE_ADMIN")` (sinon 403 permanent).
-- Sans jeton → **401** ; jeton valide mais rôle absent → **403**.
-- La règle s'applique à **chaque requête côté serveur** : le front ne fait que de l'affichage.
-- Les rôles viennent de `AuthUser.getRoles()` : illimités, valeurs brutes (`"ADMIN"`, `"AQP"`, …).
-- L'ordre des `requestMatchers` compte : les règles spécifiques avant `anyRequest().authenticated()`.
+- **`hasRole('X')` without prefix**: JWT claims carry `ADMIN` (no `ROLE_`) and the prefix is
+  added automatically when authorities are built — write `hasRole("ADMIN")`, **never**
+  `hasRole("ROLE_ADMIN")` (otherwise permanent 403).
+- No token → **401**; valid token but missing role → **403**.
+- The rule applies on **every server-side request**: the front-end only handles display.
+- Roles come from `AuthUser.getRoles()`: unlimited, raw values (`"ADMIN"`, `"AQP"`, …).
+- `requestMatchers` order matters: specific rules before `anyRequest().authenticated()`.
 
-## 8. Claims du JWT (HS512)
+## 8. JWT claims (HS512)
 
-`sub` = email, `id`, `email`, `roles` (liste illimitée, valeurs brutes), `status` (Boolean), `exp`.
-Signature : `zrouga.security.jwt-secret`.
+`sub` = email, `id`, `email`, `roles` (unlimited list, raw values), `status` (Boolean), `exp`,
+`jti` (unique identifier — used for revocation, §10).
+Signature: `zrouga.security.jwt-secret`.
 
-Côté Spring Security, les autorités sont construites avec le préfixe standard `ROLE_` :
-utilisez `@PreAuthorize("hasRole('ADMIN')")` (et non `hasAuthority('ADMIN')`) — détails §7.
+On the Spring Security side, authorities are built with the standard `ROLE_` prefix:
+use `@PreAuthorize("hasRole('ADMIN')")` (not `hasAuthority('ADMIN')`) — details in §7.
 
-## 9. Comptes désactivés (status)
+## 9. Disabled accounts (status)
 
-- `AuthUser.getStatus()` vaut `false` → **connexion refusée** (401) ;
-- un JWT existant d'un compte désactivé est **refusé à chaque requête** (le claim `status` est vérifié) ;
-- `null` = pas d'information → compte actif.
+- `AuthUser.getStatus()` returns `false` → **sign-in refused** (401);
+- an existing JWT of a disabled account is **rejected on every request** (the `status` claim is checked);
+- `null` = no information → active account.
 
 ## 10. Refresh token
 
-- **Hash en base** : la base ne stocke que le **hash SHA-256** du jeton (`TokenHashing`) — un vol de base ne donne aucun jeton utilisable.
-- **Rotation** : chaque `/refreshtoken` révoque l'ancien jeton et en émet un nouveau (opération CAS atomique, sûre en concurrence).
-- **Réutilisation = vol détecté** : présenter un jeton déjà tourné révoque **toute la famille** de l'utilisateur et répond 403 (`refresh_token_rejected`).
-- **Connexion** : un nouvel `signin` révoque tous les refresh tokens précédents de l'utilisateur (politique mono-session).
-- **Projet avec JPA** (`spring-boot-starter-data-jpa` présent) : table `refreshtoken` créée automatiquement (`user_id`, `token` (hash unique), `expiry_date`, `revoked`, index), store `JpaRefreshTokenStore`.
-- **Sans JPA** : store en mémoire (`InMemoryRefreshTokenStore`).
-- **Purge des expirés** : optionnelle — `zrouga.security.cleanup-enabled=true` active une purge périodique (`cleanup-fixed-delay-ms`), également des jetons de réinitialisation (§6).
-- Personnalisable : déclarez votre propre bean `RefreshTokenStore` — les auto-configs reculent.
+- **Hashed in DB**: the database only stores the **SHA-256 hash** of the token (`TokenHashing`) — a database leak yields no usable token.
+- **Rotation**: every `/refreshtoken` revokes the old token and issues a new one (atomic CAS operation, concurrency-safe).
+- **Reuse = detected theft**: presenting an already-rotated token revokes the user's **entire family** and answers 403 (`refresh_token_rejected`).
+- **Sign-in**: by default (`concurrent-sessions-enabled=false`), a new `signin` revokes all
+  previous refresh tokens of the user (single-session policy); `true` allows concurrent sessions.
+- **Access token revocation** (`revocation-enabled=true`): the JWT's `jti` is recorded at
+  sign-out (`/signout`) and rejected on every request until the token expires —
+  a 10,000-token in-memory ceiling (overridable store: `AccessTokenRevocationStore`).
+- **IP/UA binding** (`refresh-binding-enabled=true`): each refresh token memorizes the IP and
+  `User-Agent` at issuance; a rotation from another IP/UA answers 403 (tokens issued without
+  binding stay valid if binding is later disabled).
+- **With JPA** (`spring-boot-starter-data-jpa` present): `refreshtoken` table created
+  automatically (`user_id`, `token` (unique hash), `expiry_date`, `revoked`, `ip`, `user_agent`,
+  index), store `JpaRefreshTokenStore`.
+- **Without JPA**: in-memory store (`InMemoryRefreshTokenStore`).
+- **Expired purge**: optional — `zrouga.security.cleanup-enabled=true` activates a periodic purge
+  (`cleanup-fixed-delay-ms`), also for reset tokens (§6).
+- Customizable: declare your own `RefreshTokenStore` bean — auto-configs back off.
 
-## 11. Modes d'authentification
+## 11. Authentication modes
 
-Deux modes, commutables via `zrouga.security.auth-mode` — une valeur inconnue fait
-**échouer le démarrage** (pas de repli silencieux) :
+Two modes, switchable via `zrouga.security.auth-mode` — an unknown value **fails startup**
+(no silent fallback):
 
 | Mode | Access token | Refresh token | Nature |
 |---|---|---|---|
-| `header` (défaut) | en-tête `Authorization: Bearer <JWT>` | corps JSON de `POST /refreshtoken` | **Stateless JWTs** |
-| `cookie` | cookie `zrouga_access` (`HttpOnly`, `Path=/`) | cookie `zrouga_refresh` (`HttpOnly`, `Path=/api/auth`) | **Stateful Session Cookies** |
+| `header` (default) | `Authorization: Bearer <JWT>` header | JSON body of `POST /refreshtoken` | **Stateless JWTs** |
+| `cookie` | `zrouga_access` cookie (`HttpOnly`, `Path=/`) | `zrouga_refresh` cookie (`HttpOnly`, `Path=/api/auth`) | **Stateful Session Cookies** |
 
-### Mode `header` (défaut)
+### `header` mode (default)
 
-Comportement historique : le front stocke les deux tokens et renvoie le refresh
-dans le corps de `/refreshtoken`.
+Historical behavior: the front-end stores both tokens and sends the refresh token
+in the `/refreshtoken` body.
 
-### Mode `cookie`
+### `cookie` mode
 
-- `/signin` et `/refreshtoken` **posent** les deux cookies (réémis à chaque rotation,
-  donc invisible côté navigateur) ; le corps JSON reste identique — les tokens y
-  figurent aussi, les tests curl restent possibles.
-- Le filtre lit le header `Authorization` **puis** la cookie ; `/refreshtoken` lit le
-  corps **puis** la cookie : les deux transports coexistent sur la même application.
-- `/signout` et un `/reset-password` **réussi** vident les deux cookies (`Max-Age=0`) ;
-  un échec laisse la session intacte.
-- Flags : `cookie-secure` (défaut `false` pour le dev HTTP → `true` en production
-  HTTPS) et `cookie-same-site` (défaut `Lax` ; `None` impose `cookie-secure: true`
-  si le front est sur un autre domaine).
-- **Front (SPA)** : `withCredentials: true` + CORS `allowCredentials(true)` avec des
-  **origines explicites** (jamais `*`).
-- **CSRF** : CSRF reste désactivé dans la chaîne — les cookies `SameSite=Lax`
-  (défaut) ne sont pas envoyés en cross-site ; préférez `Strict` si front et API
-  partagent un domaine.
-- La session Spring reste `STATELESS` (aucun `HttpSession`) : les cookies ne
-  transportent que les tokens.
+- `/signin` and `/refreshtoken` **set** both cookies (re-issued on every rotation,
+  therefore invisible to the browser); the JSON body is unchanged — the tokens are
+  also there, curl tests remain possible.
+- The filter reads the `Authorization` header **then** the cookie; `/refreshtoken` reads
+  the body **then** the cookie: both transports coexist on the same application.
+- `/signout` and a **successful** `/reset-password` clear both cookies (`Max-Age=0`);
+  a failure leaves the session intact.
+- Flags: `cookie-secure` (default `false` for HTTP dev → `true` in HTTPS production)
+  and `cookie-same-site` (default `Lax`; `None` requires `cookie-secure: true` when
+  the front-end is on another domain).
+- **SPA front-end**: `withCredentials: true` + CORS `allowCredentials(true)` with
+  **explicit origins** (never `*`).
+- **CSRF**: CSRF stays disabled in the chain — `SameSite=Lax` cookies (default) are
+  not sent cross-site; prefer `Strict` if front and API share a domain.
+- The Spring session stays `STATELESS` (no `HttpSession`): the cookies only carry tokens.
 
 ```yaml
 zrouga:
   security:
-    auth-mode: cookie            # défaut : header
-    cookie-secure: false         # true en production (HTTPS)
+    auth-mode: cookie            # default: header
+    cookie-secure: false         # true in production (HTTPS)
     cookie-same-site: Lax        # Lax | Strict | None
 ```
 
-Voir les démos : `examples/demo-jwt` (header) et `examples/demo-cookie` (cookie).
+See the demos: `examples/demo-jwt` (header) and `examples/demo-cookie` (cookie).
 
-## 12. Rate-limiting (anti-bruteforce)
+## 12. Rate limiting (anti-bruteforce)
 
-5 tentatives échouées par e-mail puis 15 minutes de blocage (429), par défaut — réglable via
-`rate-limit-max-attempts` / `rate-limit-window-ms`. Une connexion réussie remet le compteur à zéro.
+5 failed attempts per e-mail then a 15-minute block (429), by default — tunable via
+`rate-limit-max-attempts` / `rate-limit-window-ms`. A successful sign-in resets the counter.
 
-- **Clés** : `signin|signup|forgot:email:<email>` et `signin|signup|forgot:ip:<ip>` — le quota IP est **×10** le quota e-mail.
-- **Vérification atomique** : la tentative est **réservée** avant l'authentification (une échec consomme le quota) ; `429` porte le code `rate_limit_exceeded`.
-- **Derrière un proxy** : `zrouga.security.trust-forwarded-for: true` fait lire `X-Forwarded-For` (défaut `false` : IP réelle).
-- Personnalisable : déclarez votre propre bean `LoginRateLimiter` (base de données, Redis, …).
+- **Keys**: `signin|signup|forgot|verification:email:<email>` and `…:ip:<ip>` — the IP quota is **×10** the e-mail quota.
+- **Atomic check**: the attempt is **reserved** before authentication (a failure consumes the quota); `429` carries code `rate_limit_exceeded`.
+- **Behind a proxy**: `zrouga.security.trust-forwarded-for: true` reads `X-Forwarded-For` (default `false`: real IP).
+- Customizable: declare your own `LoginRateLimiter` bean (database, Redis, …).
 
-### Verrouillage de compte (optionnel)
+### Account lockout (optional)
 
-`zrouga.security.lockout-enabled: true` ajoute un verrou **par compte**, en plus du rate-limit :
+`zrouga.security.lockout-enabled: true` adds a **per-account** lock, on top of rate limiting:
 
-- après `lockout-max-attempts` échecs consécutifs (défaut 5), le compte répond **423** `account_locked`
-  pendant `lockout-duration-ms` (défaut 15 min) — **y compris avec le bon mot de passe** ;
-- une connexion réussie ou l'expiration du verrou remettent le compteur à zéro (après expiration, on repart de zéro) ;
-- un compte **inconnu** se verrouille de la même manière : aucun observable différent = pas d'énumération d'e-mails ;
-- les tentatives sur un compte verrouillé restent soumises au rate-limit (le verrou ne protège pas contre le flood) ;
-- complémentaire au rate-limit : rate-limit protège **par e-mail/IP** (fenêtre glissante), verrouillage **par compte** (durée fixe) ;
-- par défaut en mémoire (perdu au redémarrage, plafond de 10 000 comptes suivis) — déclarez votre propre bean
-  `AccountLockoutService` pour persister (Redis, base de données, déverrouillage admin via `reset(email)`).
+- after `lockout-max-attempts` consecutive failures (default 5), the account answers **423**
+  `account_locked` for `lockout-duration-ms` (default 15 min) — **even with the correct password**;
+- a successful sign-in or lock expiry reset the counter (after expiry, it starts from zero);
+- an **unknown** account locks the same way: no different observable = no e-mail enumeration;
+- attempts on a locked account still hit the rate limit (the lock does not protect against floods);
+- complementary to rate limiting: rate limit protects **per e-mail/IP** (sliding window),
+  lockout **per account** (fixed duration);
+- in-memory by default (lost on restart, 10,000 tracked accounts ceiling) — declare your own
+  `AccountLockoutService` bean to persist (Redis, database, admin unlock via `reset(email)`).
 
-## 13. Politique de mot de passe (optionnelle)
+## 13. Password policy (optional)
 
-`zrouga.security.password-policy-enabled: true` valide le mot de passe sur `/signup` et `/reset-password` →
-**400** `weak_password`, avec la liste de **toutes** les règles manquantes dans le message.
+`zrouga.security.password-policy-enabled: true` validates the password on `/signup` and
+`/reset-password` → **400** `weak_password`, with the list of **all** missing rules in the message.
 
-- **Règles** : `password-min-length` (défaut 8), `password-require-uppercase`, `password-require-lowercase`,
-  `password-require-digit`, `password-require-special` (défauts tous `true` ; le spécial = caractère non
-  alphanumérique non espace).
-- **Anti-réutilisation** : `password-history-count` (défaut 3, `0` = seul le mot de passe courant est vérifié) —
-  à la réinitialisation, refus du mot de passe **courant** et des **précédents** (`400 weak_password`).
-- **Jeton préservé** : sur `/reset-password`, la politique est validée **avant** la consommation du jeton —
-  un refus laisse le jeton utilisable pour une nouvelle tentative.
-- La validation `@Size` du DTO (8 à 128 caractères) reste active même sans politique.
-- Historique en mémoire par défaut (perdu au redémarrage ; le hash du mot de passe courant, lui, est toujours
-  vérifié) — déclarez votre propre bean `PasswordHistoryStore` pour le persister.
-- Personnalisable : déclarez votre propre bean `PasswordPolicy` (dictionnaire de mots de passe, NIST SP 800-63B, …).
+- **Rules**: `password-min-length` (default 8), `password-require-uppercase`, `password-require-lowercase`,
+  `password-require-digit`, `password-require-special` (all default `true`; special = non-alphanumeric
+  non-space character).
+- **Anti-reuse**: `password-history-count` (default 3, `0` = only the current password is checked) —
+  on reset, the **current** and **previous** passwords are rejected (`400 weak_password`).
+- **Token preserved**: on `/reset-password`, the policy is validated **before** the token is
+  consumed — a rejection leaves the token usable for a new attempt.
+- The DTO `@Size` validation (8 to 128 characters) stays active even without the policy.
+- In-memory history by default (lost on restart; the current password's hash is always checked) —
+  declare your own `PasswordHistoryStore` bean to persist it.
+- Customizable: declare your own `PasswordPolicy` bean (password dictionary, NIST SP 800-63B, …).
 
-## 14. Personnalisation
+## 14. Customization
 
-Tous les beans suivants sont surchargeables — déclarez le vôtre et celui du starter est remplacé :
+All the following beans are overridable — declare yours and the starter's is replaced:
 
-| Bean | Défaut du starter |
+| Bean | Starter default |
 |---|---|
-| `SecurityFilterChain` | chaîne stateless JWT |
+| `SecurityFilterChain` | stateless JWT chain |
 | `PasswordEncoder` | `BCryptPasswordEncoder` |
 | `AuthenticationManager` | via `AuthenticationConfiguration` |
 | `AuthenticationProvider` | `DaoAuthenticationProvider` |
-| `UserDetailsService` | lit via `AuthUserProvider` |
+| `UserDetailsService` | reads through `AuthUserProvider` |
 | `JwtUtils` | HS512 + secret `zrouga.security.jwt-secret` |
-| `AuthTokenFilter` | filtre Bearer (et cookie `zrouga_access` en mode `cookie`) |
-| `RefreshTokenService` | jetons d'expiration configurable |
-| `RefreshTokenStore` | JPA si disponible, sinon mémoire |
-| `LoginRateLimiter` | en mémoire (fenêtre par e-mail) |
-| `AccountLockoutService` | en mémoire (verrouillage de compte) |
-| `PasswordPolicy` | longueur + complexité (`password-*`) |
-| `PasswordHistoryStore` | en mémoire (anti-réutilisation) |
-| `PasswordResetTokenStore` | en mémoire (jetons de réinitialisation) |
-| `PasswordResetEmailSender` | SMTP (`spring.mail.*`), seulement si `reset-enabled=true` |
-| `AuthUserPasswordUpdater` | SPI projet hôte (requis si `reset-enabled=true`) |
-| `AuthService`, `AuthResource`, `AuthEntryPointJwt`, `TokenControllerAdvice`, `PasswordResetService` | implémentations par défaut |
+| `AuthTokenFilter` | Bearer filter (and `zrouga_access` cookie in `cookie` mode) |
+| `RefreshTokenService` | tokens with configurable expiry |
+| `RefreshTokenStore` | JPA if available, else in-memory |
+| `AccessTokenRevocationStore` | in-memory (`jti` revocation, 10,000 ceiling) |
+| `LoginRateLimiter` | in-memory (per-e-mail window) |
+| `AccountLockoutService` | in-memory (account lockout) |
+| `PasswordPolicy` | length + complexity (`password-*`) |
+| `PasswordHistoryStore` | in-memory (anti-reuse) |
+| `PasswordResetTokenStore` | in-memory (reset tokens) |
+| `PasswordResetEmailSender` | SMTP (`spring.mail.*`), only if `reset-enabled=true` |
+| `AuthUserPasswordUpdater` | host-project SPI (required if `reset-enabled=true`) |
+| `EmailVerificationTokenStore` | in-memory (verification tokens, §16) |
+| `EmailVerificationEmailSender` | async SMTP (`spring.mail.*`), only if `email-verification-enabled=true` |
+| `AuthUserEmailVerifier` | host-project SPI (required if `email-verification-enabled=true`) |
+| `TwoFactorSecretStore` | in-memory (TOTP secrets, §17) |
+| `AuthService`, `AuthResource`, `AuthEntryPointJwt`, `TokenControllerAdvice`, `PasswordResetService`, `EmailVerificationService` | default implementations |
 
-- Exclusion complète : `spring.autoconfigure.exclude=zrouga.spring.security.autoconfigure.ZrougaSecurityAutoConfiguration`
-- `AuthUserCreator` : SPI fournie par le projet hôte (voir §5) — sans elle, `/signup` répond 501.
-- CORS : à définir côté projet hôte (aucune origine codée en dur côté starter).
-- `@CrossOrigin` supprimé : configurez le CORS via votre `CorsConfigurationSource` / `WebMvcConfigurer`.
-- **Image native GraalVM** : hints fournis (`ZrougaRuntimeHints` + `META-INF/spring/aot.factories`) pour les DTO réfléchis.
-- **Erreurs** : `AuthException` + sous-exceptions portent un `code()` machine ; `TokenControllerAdvice` ne traite que les exceptions du starter (déclarez le vôtre pour vos contrôleurs).
+- Full exclusion: `spring.autoconfigure.exclude=zrouga.spring.security.autoconfigure.ZrougaSecurityAutoConfiguration`
+- `AuthUserCreator`: host-project SPI (see §5) — without it, `/signup` answers 501.
+- CORS: defined on the host-project side (no hardcoded origin in the starter).
+- `@CrossOrigin` removed: configure CORS via your `CorsConfigurationSource` / `WebMvcConfigurer`.
+- **GraalVM native image**: hints provided (`ZrougaRuntimeHints` + `META-INF/spring/aot.factories`) for reflected DTOs.
+- **Errors**: `AuthException` + subclasses carry a machine `code()`; `TokenControllerAdvice`
+  only handles starter exceptions (declare your own for your controllers).
+- **Events**: every event in §18 is published via `ApplicationEventPublisher` —
+  listen to them with `@EventListener` in your project.
 
-## 15. Build / publication (mainteneur)
+## 15. Build / publication (maintainer)
 
 ```powershell
-.\mvnw.cmd verify          # tests + jacoco + jar + sources + javadoc
+.\mvnw.cmd verify          # tests + jacoco + japicmp + jar + sources + javadoc
 $env:GITHUB_TOKEN = gh auth token   # scope write:packages
 .\mvnw.cmd deploy          # → GitHub Packages
 ```
 
-- **CI GitHub Actions** (`.github/workflows/ci.yml`) : `mvnw verify` à chaque push/PR ; publication automatique sur tag `v*`.
-- **Release** : merge sur `main`, tag `v2.1.0` → la CI publie la version.
-- **Exemple d'application** : `examples/demo-jwt/` (Stateless JWT en header) et `examples/demo-cookie/` (Stateful Session Cookies) — le starter doit être `mvnw installé` localement avant de les builder.
-- **Couverture** : rapport JaCoCo dans `target/site/jacoco/` (seuil verrouillé : ≥ 80 % instructions, ≥ 55 % branches).
-- **Métadonnées IDE** : autocomplétion et descriptions des propriétés `zrouga.security.*` (configuration-processor).
+- **GitHub Actions CI** (`.github/workflows/ci.yml`): builds the previous release then
+  runs `mvnw verify` (tests + JaCoCo + **japicmp**) on every push/PR; publishes on
+  tag `v*` + **creates the GitHub release with automatic notes**.
+- **CodeQL** (`.github/workflows/codeql.yml`): security analysis on every push/PR + weekly.
+- **Dependabot** (`.github/dependabot.yml`): weekly Maven (root + demos) and GitHub Actions updates.
+- **Release**: full process in [`RELEASING.md`](RELEASING.md) (version bump,
+  `japicmp.oldVersion`, CHANGELOG, tag `v2.2.0` → CI publishes and generates the notes).
+- **Application examples**: `examples/demo-jwt/` (stateless JWT in header) and
+  `examples/demo-cookie/` (stateful session cookies) — the starter must be `mvnw install`ed
+  locally before building them.
+- **Coverage**: JaCoCo report in `target/site/jacoco/` (locked thresholds: ≥ 80 % instructions, ≥ 55 % branches).
+- **Binary compatibility**: japicmp report in `target/japicmp/japicmp.md` — any binary
+  break fails the build (`@Deprecated` shims or targeted exclusions).
+- **IDE metadata**: auto-completion and descriptions of `zrouga.security.*` properties (configuration-processor).
 
-Repository source : https://github.com/karimzrouga/zrouga-spring-security
+Source repository: https://github.com/karimzrouga/zrouga-spring-security
+
+## 16. E-mail verification (optional)
+
+**Disabled by default.** On first activation: declare the `AuthUserEmailVerifier` SPI
+(startup fails with an explicit message if missing), `email-verification-base-url`
+and a `JavaMailSender` (or your own `EmailVerificationEmailSender`).
+
+```yaml
+zrouga:
+  security:
+    email-verification-enabled: true
+    email-verification-base-url: https://my-front.test/verify   # front page
+    email-verification-token-ttl-ms: 86400000                    # 24 h
+    email-verification-from: no-reply@my-project.test            # default: spring.mail.username
+```
+
+```java
+@Component
+public class MyEmailVerifier implements AuthUserEmailVerifier {
+
+    private final UserRepository repository;
+
+    @Override
+    public void verifyEmail(String email) {
+        repository.findByEmail(email).ifPresent(u -> u.setEmailVerified(true));
+    }
+}
+```
+
+### Flow
+
+| Step | Call | Response |
+|---|---|---|
+| 1. Sign-up | `POST /signup` → `SignUpEvent` | 256-bit token issued (24 h TTL) + e-mail sent **asynchronously**: `{email-verification-base-url}?token=…` |
+| 2. Verification | `POST /verify-email` `{token}` | **200** — token consumed (single use) + `AuthUserEmailVerifier.verifyEmail(email)` called |
+| 3. Resend | `POST /resend-verification` `{email}` | **200** always identical (anti-enumeration) — new token issued if the account exists |
+
+- **Rate limit**: per e-mail, per IP, and per IP on verification tokens (keys `verification:*`).
+- Invalid, expired or reused token → **400** `verification_token_invalid` (same message everywhere).
+- Without `email-verification-enabled`, the endpoints answer **501** `verification_not_supported`.
+- In-memory storage by default; declare `EmailVerificationTokenStore` for distributed persistence.
+- The default SMTP sender is **asynchronous** (sign-up does not wait on the network).
+
+## 17. Two-factor authentication — TOTP (optional)
+
+**Disabled by default.** Works with any TOTP authenticator (Google Authenticator, Authy,
+1Password…): RFC 6238, SHA-1, 6 digits, 30 s step, ±1 window.
+
+```yaml
+zrouga:
+  security:
+    two-factor-enabled: true
+    two-factor-issuer: my-project           # default: "zrouga"
+    two-factor-challenge-ttl-ms: 300000     # default: challenge valid 5 min
+```
+
+### Flow
+
+| Step | Call | Response |
+|---|---|---|
+| 1. Enable | `POST /2fa/setup` (Bearer) | **200** `{secret, otpauthUri}` — enter the secret manually or encode `otpauthUri` as a QR on the front |
+| 2. Confirm | `POST /2fa/enable` (Bearer) `{code}` | **200** — a valid TOTP code required; 2FA active for the account |
+| 3. Sign-in | `POST /signin` (2FA active) | **200** `{twoFactorRequired: true, twoFactorToken}` — **no tokens issued** before verification |
+| 4. Verify | `POST /2fa/verify` `{twoFactorToken, code}` | **200** full tokens (+ cookies in `cookie` mode) |
+| 5. Disable | `POST /2fa/disable` (Bearer) `{code}` | **200** — proof by the current code required |
+
+- The `twoFactorToken` challenge is a scoped JWT (claim `2fa`), valid for
+  `two-factor-challenge-ttl-ms` (5 min by default).
+- Secrets stored via `TwoFactorSecretStore` (in-memory by default — declare your own to
+  persist: SQL table, Redis).
+- Without `two-factor-enabled`, the `/2fa/*` endpoints answer **501** `two_factor_not_supported`.
+- Expired or wrong code → **400** `invalid_two_factor_code`; missing/expired challenge → **401** `two_factor_token_invalid`.
+- Both transports (header / cookie) work with the challenge.
+
+## 18. Observability — events, metrics, health
+
+### Spring events
+
+Published via `ApplicationEventPublisher` — listen with `@EventListener`:
+
+| Event | Published when |
+|---|---|
+| `SignInEvent` | successful sign-in |
+| `SignInFailedEvent` | failed sign-in (password, rate limit, lockout, inactive account) |
+| `SignUpEvent` | sign-up created |
+| `SignOutEvent` | sign-out (`/signout`) |
+| `TokenRefreshedEvent` | successful refresh token rotation |
+| `LockoutEvent` | account locked (`lockout-enabled`) |
+| `PasswordResetEvent` | password reset |
+| `EmailVerifiedEvent` | e-mail verified (§16) |
+
+### Micrometer metrics
+
+Requires `spring-boot-starter-actuator` (optional in the starter) on the consumer
+project's classpath. Counters exposed through any `MeterRegistry`:
+
+| Counter | Tags |
+|---|---|
+| `zrouga.security.signin` | `outcome=success\|failure` |
+| `zrouga.security.signup` | — |
+| `zrouga.security.signout` | — |
+| `zrouga.security.token.refresh` | — |
+| `zrouga.security.account.lockout` | — |
+| `zrouga.security.password.reset` | — |
+| `zrouga.security.email.verified` | — |
+
+### Health indicator
+
+With the actuator exposed (`/actuator/health`), the **`zrougaSecurity`** component
+summarizes the **configuration** (always `UP` — it depends on no external service):
+
+```json
+{
+  "status": "UP",
+  "components": {
+    "zrougaSecurity": {
+      "status": "UP",
+      "details": {
+        "authMode": "header", "revocation": false, "concurrentSessions": false,
+        "refreshBinding": false, "emailVerification": false, "twoFactor": false,
+        "lockout": false, "passwordPolicy": false, "passwordReset": false,
+        "signup": true, "status": "UP"
+      }
+    }
+  }
+}
+```
+
+## 19. FAQ / Troubleshooting
+
+**`401` on every request even with a valid token**
+→ Invalid secret (Base64 ≥ 64 bytes), missing `Authorization: Bearer <JWT>` header, or
+`AuthUser.getStatus()` = `false` (disabled account, §9). Also check the clock (`exp`).
+
+**`403 refresh_token_rejected` after a refresh**
+→ An already-rotated token was reused: the **entire family** is revoked (§10). The front-end
+must store the `refreshToken` returned by each `/refreshtoken`. With
+`refresh-binding-enabled=true`, a change of IP or `User-Agent` also produces this 403.
+
+**Cookies are not set (`cookie` mode)**
+→ `cookie-secure: true` requires HTTPS; `cookie-same-site: None` requires `cookie-secure: true`;
+front on another domain → `SameSite=None` + CORS `allowCredentials(true)` with explicit
+origins. In curl, use `-c`/`-b` for the cookie jar.
+
+**`501 verification_not_supported` / `501 two_factor_not_supported`**
+→ Feature disabled: enable `email-verification-enabled` (§16) or `two-factor-enabled`
+(§17) — and check the prerequisites (SPI, base URL, SMTP).
+
+**`501 signup_not_supported` or a "declare an AuthUserCreator bean" message**
+→ Declare the host-project SPI (§3/§5): `AuthUserCreator`, `AuthUserPasswordUpdater`
+(reset), `AuthUserEmailVerifier` (e-mail verification).
+
+**Startup failure: "no … bean declared" or invalid secret**
+→ Explicit messages at startup: a SPI required by an enabled option is missing, or
+`jwt-secret` is not valid Base64 ≥ 64 bytes (§2).
+
+**`429 rate_limit_exceeded`**
+→ Window of 5 attempts / 15 min (§12). Behind a proxy: `trust-forwarded-for: true`.
+Need a higher limit: declare your own `LoginRateLimiter`.
+
+**`423 account_locked`**
+→ `lockout-enabled`: 5 failures → 15 min lock (§12). Unlock: wait, or a custom
+`AccountLockoutService` bean with `reset(email)`.
+
+**No `zrouga.security.*` metrics**
+→ Add `spring-boot-starter-actuator` to the consumer project and expose an endpoint
+(`management.endpoints.web.exposure.include`); Spring Boot's Micrometer registry does the rest.
+
+**`/actuator/health` does not show `zrougaSecurity`**
+→ Same cause: actuator missing from the classpath or the health endpoint not exposed (§18).
+
+**The `JpaRefreshTokenStorePostgresTest` test is "skipped"**
+→ Normal without Docker: the Testcontainers test skips itself (`disabledWithoutDocker`)
+and runs in CI. Install Docker to run it locally.
+
+**japicmp does not run ("ignore missing old version")**
+→ The previous version (`japicmp.oldVersion`) is not in your `~/.m2`: CI builds it from
+the `vX.Y.Z` tag; locally, install it once from the tag (see `RELEASING.md`).
