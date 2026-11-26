@@ -3,6 +3,98 @@
 Toutes les versions notables de `zrouga.spring:security-starter`.
 Les versions antérieures à 2.0.0 sont décrites dans les releases GitHub.
 
+## [2.2.0] - 2026-11-25
+
+Fonctionnalités de sécurité optionnelles (toutes **désactivées par défaut** —
+le comportement 2.1.0 est inchangé tant qu'elles ne sont pas activées),
+observabilité intégrée, outillage CI et documentation bilingue.
+
+### Added
+
+- **Révocation des access tokens** (`zrouga.security.revocation-enabled`,
+  défaut `false`) : liste noire par `jti` via `AccessTokenRevocation` +
+  `AccessTokenRevocationStore` (défaut `InMemoryAccessTokenRevocationStore`,
+  plafond 10 000 entrées). `/signout` révoque le `jti` de l'access token
+  courant ; le filtre refuse ensuite tout usage du token, y compris avant son
+  expiration naturelle.
+- **Sessions concurrentes** (`concurrent-sessions-enabled`, défaut `false`) :
+  `false` = une seule session active — un nouveau `/signin` invalide la
+  session précédente ; `true` = plusieurs appareils connectés en parallèle.
+- **Liaison IP / user-agent du refresh token** (`refresh-binding-enabled`,
+  défaut `false`) : colonnes `ip` et `user_agent` ajoutées à
+  `StoredRefreshToken` ; un refresh émis depuis une autre IP ou un autre
+  user-agent répond `403 refresh_token_rejected`.
+- **Événements d'authentification** publiés via `ApplicationEventPublisher` :
+  `SignInEvent`, `SignInFailedEvent`, `SignUpEvent`, `SignOutEvent`,
+  `TokenRefreshedEvent`, `LockoutEvent`, `PasswordResetEvent`,
+  `EmailVerifiedEvent`.
+- **Vérification d'e-mail** (`zrouga.security.email-verification-enabled`,
+  défaut `false`) : `POST /api/auth/verify-email` et
+  `POST /api/auth/resend-verification` ; SPI `AuthUserEmailVerifier` à
+  implémenter par l'hôte (défaut `501 verification_not_supported`), jetons
+  persistés par `EmailVerificationTokenStore` (défaut mémoire), lien fourni
+  par `email-verification-base-url` (TTL `email-verification-token-ttl-ms`,
+  expéditeur `email-verification-from`), envoi via
+  `EmailVerificationEmailSender` / `SmtpEmailVerificationEmailSender` ;
+  jeton invalide → `400 verification_token_invalid`.
+- **Double authentification TOTP (2FA)** (`zrouga.security.two-factor-enabled`,
+  défaut `false`) : implémentation RFC 6238 (`totp/Totp`), endpoints
+  `POST /api/auth/2fa/{setup,enable,disable,verify}`. À la connexion, si
+  l'utilisateur a la 2FA activée, la réponse n'émet pas de tokens mais un
+  challenge (`twoFactorRequired: true`, `twoFactorToken`, TTL
+  `two-factor-challenge-ttl-ms`, défaut 5 min) à valider via
+  `/2fa/verify` ; `JwtResponse` passe à 5 composants. Codes :
+  `two_factor_not_supported`, `two_factor_token_invalid`,
+  `invalid_two_factor_code`. Secrets stockés par `TwoFactorSecretStore`
+  (défaut mémoire, `two-factor-issuer` défaut `zrouga`).
+- **Observabilité** (spring-boot-starter-actuator en dépendance *optionnelle*) :
+  - `ZrougaSecurityMetrics` : compteurs
+    `zrouga.security.signin` (+ `.signin.success` / `.signin.failure`),
+    `.signup`, `.signout`, `.token.refresh`, `.account.lockout`,
+    `.password.reset`, `.email.verified` ;
+  - `ZrougaSecurityHealthIndicator` : état `UP` + détails de la
+    configuration (mode d'authentification, verrouillage, politique de mots
+    de passe, 2FA, vérification d'e-mail…) ;
+  - `ZrougaObservabilityAutoConfiguration` : activée uniquement si actuator
+    est présent sur le classpath.
+- **CI et qualité** :
+  - test PostgreSQL réel via Testcontainers
+    (`JpaRefreshTokenStorePostgresTest`, 5 tests — skippé automatiquement
+    sans Docker, exécuté dans CI) ;
+  - **japicmp** au build : comparaison binaire avec la dernière release
+    (`japicmp.oldVersion`) → le build échec sur rupture incompatibles,
+    rapport `target/japicmp/japicmp.md` ;
+  - **CodeQL** (workflow dédié, build manuel) et **Dependabot**
+    (hebdomadaire : Maven + GitHub Actions) ;
+  - publication de la **release GitHub avec notes automatiques**
+    (`gh release create --generate-notes`, job `deploy` avec
+    `contents: write`) ;
+  - `RELEASING.md` (processus de release), `CONTRIBUTING.md` et gabarits
+    d'issues (bug / fonctionnalité).
+- **Documentation** : `README.md` (EN) et `README.fr.md` (FR) réécrits —
+  badges (CI, CodeQL, release, Java 21, Spring Boot 4.1, MIT), sections
+  vérification d'e-mail, 2FA, observabilité (événements, métriques, health),
+  FAQ / dépannage (12 entrées).
+- **Exemples** :
+  - `demo-cookie` : **front statique intégré** (`static/index.html`) servi sur
+    `/` — inscription, connexion, `/api/me`, refresh, signout en
+    `credentials: 'include'` ;
+  - `demo-jwt` : **Swagger UI** via springdoc-openapi 3.2.0 (ligne
+    Spring Boot 4.1.x) sur `/swagger-ui.html` + spec `/v3/api-docs`
+    (endpoints publics ajoutés à `zrouga.security.public-paths`).
+
+### Changed
+
+- **Compatibilité binaire 2.1.0 → 2.2.0 préservée** (vérifiée par japicmp,
+  sémantique MINOR) : constructeurs historiques conservés en `@Deprecated`
+  avec délégation — `AuthService` (9 paramètres) et `AuthService.logoutUser()`,
+  `AuthResource` (3 paramètres) et `AuthResource.logoutUser(HttpServletResponse)`,
+  `PasswordResetService` (10 paramètres).
+- **POM** : `<scm>` et `<developers>` ajoutés (prérequis de publication
+  Maven Central).
+- **Dépendances de test** : `spring-boot-testcontainers`,
+  `testcontainers-junit-jupiter`, `testcontainers-postgresql` (scope `test`).
+
 ## [2.1.0] - 2026-11-25
 
 Fonctionnalités optionnelles, toutes **désactivées par défaut** : le
